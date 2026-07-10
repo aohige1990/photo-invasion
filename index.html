@@ -232,15 +232,16 @@ const MAINS = [
  {id:'handgun', name:'ハンドガン',       price:0,    dmg:1,   rate:14, death:'normal',
   desc:'標準的な連射力。最初から所持。'},
  {id:'shotgun', name:'ショットガン',     price:300,  dmg:1,   rate:32, death:'knockback', pellets:3, spread:.14, knock:14,
-  desc:'3方向に拡散。敵を大きく吹き飛ばす。'},
+  closeRange:110, closeMul:2, closeKnock:22,
+  desc:'3方向に拡散。至近距離で撃つと威力2倍になり敵を大きく突き放す。'},
  {id:'gatling', name:'ガトリングガン',   price:800,  dmg:.7,  rate:5,  death:'shred',
   desc:'超高速連射。敵を粉々に引き裂く。'},
- {id:'rocket',  name:'ロケットランチャー', price:1500, dmg:4,   rate:48, death:'explode', splash:85,
-  desc:'着弾点で爆発。範囲内の敵をまとめて爆殺。'},
- {id:'beam',    name:'ビームガン',       price:2500, dmg:2,   rate:24, death:'ash', pierce:true,
-  desc:'敵を貫通するビーム。当たった敵は灰になる。'},
- {id:'rail',    name:'レールガン',       price:4000, dmg:6,   rate:70, death:'pierce', hitscan:true,
-  desc:'画面端まで一直線に貫く超電磁砲。'},
+ {id:'rocket',  name:'ロケットランチャー', price:1500, dmg:6,   rate:48, death:'explode', splash:85,
+  desc:'着弾点で小さく爆発。範囲内の敵をまとめて爆殺。'},
+ {id:'beam',    name:'ビームガン',       price:2500, dmg:4,   rate:30, death:'ash', autoBeam:true, maxTargets:5,
+  desc:'画面上の敵に自動で複数の光線が命中する追尾ビーム。'},
+ {id:'rail',    name:'レールガン',       price:4000, dmg:6,   rate:70, death:'pierce', hitscan:true, oneShot:true,
+  desc:'向いている方向へ一直線。ボス以外は一撃で貫き倒す。'},
 ];
 const SUBS = [
  {id:'punch',    name:'パンチ',       price:0,    dmg:2,  rate:24, range:55, death:'launch',
@@ -473,6 +474,9 @@ function renderShop(){
     } else {
       const dmg = (d.dmg * (own?lvMul(lv):1)).toFixed(1);
       stats = '威力 '+dmg+' / 連射 '+(60/d.rate).toFixed(1)+'発毎秒';
+      if (d.closeRange) stats += '(至近距離 '+(dmg*d.closeMul).toFixed(1)+')';
+      if (d.oneShot) stats += ' / ボス以外は即撃破';
+      if (d.autoBeam) stats += ' / 最大'+d.maxTargets+'体に自動命中';
     }
     const lvTag = own ? ('Lv '+lv+(lv>=MAX_LV?' MAX':'')) : (unlocked ? ('$'+d.price) : 'LOCKED');
     el.innerHTML =
@@ -820,19 +824,40 @@ function fireMain(){
   const dmg=w.dmg*lvMul(lv);
   const bx=player.x+player.dir*30*PS, by=player.y-58*PS;
   burst(bx+player.dir*6,by,'#ffd94a',3);
-  if(w.hitscan){
-    // レールガン: 即着弾ライン
-    beams.push({x1:bx,y:by,x2:player.dir>0?W+40:-40,life:12,color:'#7ae7ff'});
+
+  if(w.oneShot){
+    // レールガン: 向いている方向へ一直線。ボス以外は一撃で撃破
+    beams.push({x1:bx,y1:by,x2:player.dir>0?W+40:-40,y2:by,life:14,maxLife:14,width:9,color:'#7ae7ff'});
     shake=Math.max(shake,6);
     for(const e of enemies){
       if(!canHit(e))continue;
       const inDir = player.dir>0 ? e.x>player.x : e.x<player.x;
       if(inDir && by>e.y-105*e.scale && by<e.y){
-        hitEnemy(e,dmg,w.death,player.dir,0);
+        if(e.boss) hitEnemy(e,dmg,w.death,player.dir,0);
+        else hitEnemy(e,e.hp+9999,w.death,player.dir,0);   // 即死
       }
     }
     return;
   }
+
+  if(w.autoBeam){
+    // ビームガン: 画面上の敵に自動追尾する複数の光線
+    const targets = enemies
+      .filter(e=>canHit(e) && e.x>-10 && e.x<W+10)
+      .sort((a,b)=>Math.abs(a.x-player.x)-Math.abs(b.x-player.x))
+      .slice(0, w.maxTargets);
+    if(targets.length===0){
+      beams.push({x1:bx,y1:by,x2:bx+player.dir*150,y2:by,life:10,maxLife:10,width:6,color:'#7ae7ff'});
+    }
+    for(const e of targets){
+      const tx=e.x, ty=e.y-55*e.scale;
+      beams.push({x1:bx,y1:by,x2:tx,y2:ty,life:14,maxLife:14,width:6,color:'#7ae7ff'});
+      hitEnemy(e,dmg,w.death,Math.sign(tx-player.x)||1,0);
+    }
+    shake=Math.max(shake,targets.length?4:0);
+    return;
+  }
+
   const pellets=w.pellets||1;
   for(let i=0;i<pellets;i++){
     const sp=w.spread?(i-(pellets-1)/2)*w.spread:0;
@@ -894,9 +919,11 @@ function update(){
       if(!canHit(e)||b.hit.has(e))continue;
       if(Math.abs(b.x-e.x)<20*e.scale+6 && b.y>e.y-105*e.scale && b.y<e.y){
         if(b.wpn.id==='rocket'){
-          // 爆発: 範囲ダメージ
-          rings.push({x:b.x,y:b.y,r:8,maxR:b.wpn.splash,life:20,color:'#ff8a3a'});
-          burst(b.x,b.y,'#ff8a3a',14,1.5);
+          // 爆発: コンパクトな閃光+爆煙で範囲ダメージ
+          rings.push({x:b.x,y:b.y,r:6,maxR:22,life:8,color:'#fff3b0'});
+          rings.push({x:b.x,y:b.y,r:10,maxR:58,life:16,color:'#ff8a3a'});
+          burst(b.x,b.y,'#ffe97a',6,1.6);
+          burst(b.x,b.y,'#ff8a3a',12,1.3);
           shake=Math.max(shake,9);
           for(const e2 of enemies){
             if(!canHit(e2))continue;
@@ -907,7 +934,16 @@ function update(){
           return false;
         }
         b.hit.add(e);
-        hitEnemy(e,b.dmg,b.wpn.death,Math.sign(b.vx)||1,b.wpn.knock||0);
+        let dmg=b.dmg, knock=b.wpn.knock||0;
+        if(b.wpn.closeRange){
+          const dist=Math.abs(e.x-player.x);
+          if(dist < b.wpn.closeRange*PS){
+            dmg = b.dmg*b.wpn.closeMul; knock = b.wpn.closeKnock;
+            addFloat(e.x, e.y-118*e.scale, '至近弾!', '#ff9a3a');
+            burst(e.x,e.y-60*e.scale,'#ffb45a',6,1.2);
+          }
+        }
+        hitEnemy(e,dmg,b.wpn.death,Math.sign(b.vx)||1,knock);
         if(!b.wpn.pierce)return false;
       }
     }
@@ -1134,12 +1170,13 @@ function loop(){
     ctx.save();
     if(shake>0)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
     drawBG();
-    // レールガンのビーム
+    // レールガン/ビームガンのビーム
     for(const b of beams){
-      ctx.strokeStyle=b.color;ctx.globalAlpha=b.life/12;
-      ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(b.x1,b.y);ctx.lineTo(b.x2,b.y);ctx.stroke();
-      ctx.strokeStyle='#fff';ctx.lineWidth=3;
-      ctx.beginPath();ctx.moveTo(b.x1,b.y);ctx.lineTo(b.x2,b.y);ctx.stroke();
+      const y1=b.y1!==undefined?b.y1:b.y, y2=b.y2!==undefined?b.y2:b.y;
+      ctx.strokeStyle=b.color;ctx.globalAlpha=b.life/(b.maxLife||12);
+      ctx.lineWidth=b.width||8;ctx.beginPath();ctx.moveTo(b.x1,y1);ctx.lineTo(b.x2,y2);ctx.stroke();
+      ctx.strokeStyle='#fff';ctx.lineWidth=(b.width||8)*0.4;
+      ctx.beginPath();ctx.moveTo(b.x1,y1);ctx.lineTo(b.x2,y2);ctx.stroke();
       ctx.globalAlpha=1;
     }
     // 弾
@@ -1151,11 +1188,6 @@ function loop(){
         ctx.beginPath();ctx.moveTo(10,-4);ctx.lineTo(17,0);ctx.lineTo(10,4);ctx.closePath();ctx.fill();
         ctx.restore();
         burst(b.x-Math.sign(b.vx)*10,b.y,'#ffb45a',1,.5);
-      } else if(b.wpn.id==='beam'){
-        ctx.fillStyle='#7ae7ff';
-        ctx.beginPath();ctx.ellipse(b.x,b.y,14,4,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle='#fff';
-        ctx.beginPath();ctx.ellipse(b.x,b.y,7,2,0,0,Math.PI*2);ctx.fill();
       } else {
         ctx.fillStyle='#ffe97a';
         ctx.beginPath();ctx.ellipse(b.x,b.y,7,3,0,0,Math.PI*2);ctx.fill();
