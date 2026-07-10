@@ -54,6 +54,9 @@
   .pick-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #1b4a29;}
   .pick-btn input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0;}
   .reset-btn{background:none;border:none;color:#8fa5c4;font-size:12px;text-decoration:underline;cursor:pointer;}
+  .line-label{align-self:flex-start;color:#8fd2ff;font-size:12px;font-weight:bold;margin-top:2px;}
+  .line-input{width:100%;background:#233650;color:#dbe6f5;border:1px solid #3d5270;border-radius:10px;
+    padding:8px 10px;font-size:13px;line-height:1.6;resize:vertical;font-family:inherit;}
   .hint{color:#8fa5c4;font-size:12px;text-align:center;max-width:520px;line-height:1.7;}
 
   /* ショップ */
@@ -96,6 +99,7 @@
     background:rgba(255,90,74,.35);border-color:rgba(255,120,90,.6);}
   #btnW{right:4vw;bottom:calc(5vh + 96px);width:52px;height:52px;font-size:11px;border-radius:14px;}
   #btnPause{right:10px;top:10px;width:44px;height:44px;font-size:18px;border-radius:12px;}
+  #btnMute{right:64px;top:14px;border-radius:10px;}
 
   .overlay{position:fixed;inset:0;z-index:30;display:none;flex-direction:column;
     align-items:center;justify-content:center;gap:14px;background:rgba(6,10,18,.85);}
@@ -103,6 +107,17 @@
   .overlay h2{font-size:clamp(28px,8vw,52px);}
   .overlay .stat{color:#dbe6f5;font-size:18px;line-height:1.9;text-align:center;}
   .overlay .stat b{color:var(--ui);font-size:1.3em;}
+  /* ポーズはスクリーンショットの邪魔をしないよう画面全体を暗くせず小さなカードのみ表示 */
+  #ovPause{background:transparent;justify-content:flex-start;padding-top:6vh;pointer-events:none;}
+  #ovPause .pause-card{pointer-events:auto;background:rgba(15,24,38,.94);border:2px solid #3d5270;
+    border-radius:18px;padding:16px 26px;display:flex;flex-direction:column;align-items:center;gap:10px;
+    box-shadow:0 8px 22px rgba(0,0,0,.55);}
+  #ovPause .pause-card h2{font-size:22px;color:var(--ui);margin:0;}
+  #ovPause.hide-ui{display:none;}
+  #showUiTab{position:fixed;top:10px;left:10px;z-index:31;display:none;
+    background:rgba(15,24,38,.85);color:#dbe6f5;border:1px solid #3d5270;border-radius:10px;
+    font-size:12px;padding:8px 12px;}
+  #showUiTab.show{display:block;}
 </style>
 </head>
 <body>
@@ -117,6 +132,7 @@
   <button class="btn" id="goEndless">エンドレス</button>
   <button class="btn green" id="goShop">ショップ</button>
   <button class="btn sub" id="goSetup">キャラ設定</button>
+  <button class="btn sub" id="muteBtnTitle">🔊 サウンドON</button>
   <p class="hint" id="titleInfo"></p>
 </div>
 
@@ -148,6 +164,34 @@
       </label>
       <button class="reset-btn" data-reset="enemy">初期キャラに戻す</button>
     </div>
+    <div class="card">
+      <h2>ボス</h2>
+      <canvas id="prevBoss" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="boss" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="boss" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileBoss" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="boss">敵と同じ画像に戻す</button>
+    </div>
+  </div>
+  <div class="setup-grid" style="max-width:640px;">
+    <div class="card" style="width:100%;">
+      <h2>ボスのセリフ</h2>
+      <p class="hint" style="margin:0;">改行区切りで複数登録すると、その中からランダムに選ばれます。</p>
+      <label class="line-label">登場時</label>
+      <textarea class="line-input" id="lineAppear" rows="3"></textarea>
+      <label class="line-label">被弾時(HP減少のたびに)</label>
+      <textarea class="line-input" id="lineMid" rows="3"></textarea>
+      <label class="line-label">撃破時</label>
+      <textarea class="line-input" id="lineDefeat" rows="3"></textarea>
+      <div class="mode-row">
+        <button class="pick-btn" id="saveLines" style="background:#7d5ae0;box-shadow:0 3px 0 #4a34a8;">セリフを保存</button>
+        <button class="reset-btn" id="resetLines" style="flex:none;padding:0 10px;">定型文に戻す</button>
+      </div>
+    </div>
   </div>
   <p class="hint">顔はめ込み: 写真の中央を丸く切り抜いて頭にセット。全身画像: 写真がそのままキャラになります(背景透過PNG推奨)。写真は端末内でのみ処理され、外部送信はされません。</p>
   <button class="btn" id="setupDone">完了</button>
@@ -175,14 +219,19 @@
   <div class="pad" id="btnF">ショット</div>
   <div class="pad" id="btnW">武器<br>切替</div>
   <div class="pad" id="btnPause">II</div>
+  <div class="pad" id="btnMute" style="width:36px;height:36px;font-size:15px;">🔊</div>
 </div>
 
 <!-- ポーズ -->
 <div class="overlay" id="ovPause">
-  <h2 style="color:var(--ui);">ポーズ</h2>
-  <button class="btn" id="resumeBtn">再開</button>
-  <button class="btn sub" id="quitBtn">タイトルへ</button>
+  <div class="pause-card">
+    <h2>ポーズ中</h2>
+    <button class="btn" id="resumeBtn">再開</button>
+    <button class="btn sub" id="hideUiBtn">画面を隠してスクショ</button>
+    <button class="btn sub" id="quitBtn">タイトルへ</button>
+  </div>
 </div>
+<button id="showUiTab">タップで表示に戻す</button>
 
 <!-- ステージクリア -->
 <div class="overlay" id="ovClear">
@@ -227,6 +276,111 @@ function fitCanvas(){
 }
 addEventListener('resize', fitCanvas); fitCanvas();
 
+/* ================= サウンド & バイブ =================
+   外部音源ファイルを使わず Web Audio API でその場合成。
+   単一HTMLファイル構成を保つための方針。
+==================================================== */
+function vibrate(pattern){
+  try{ if(!sv.muted && navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
+}
+const Snd = (()=>{
+  let ctx=null, master=null, musicGain=null, sfxGain=null;
+  let musicOn=false, musicStep=0, musicTimer=null;
+
+  function ensure(){
+    if(!ctx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return false;
+      ctx = new AC();
+      master = ctx.createGain(); master.gain.value = sv.muted?0:0.9; master.connect(ctx.destination);
+      musicGain = ctx.createGain(); musicGain.gain.value = 0.22; musicGain.connect(master);
+      sfxGain = ctx.createGain(); sfxGain.gain.value = 0.8; sfxGain.connect(master);
+    }
+    if(ctx.state==='suspended') ctx.resume();
+    return true;
+  }
+  function setMuted(m){
+    sv.muted = m;
+    if(master) master.gain.setTargetAtTime(m?0:0.9, ctx.currentTime, 0.05);
+  }
+  function tone(freq,dur,type,vol,slideTo,delay){
+    if(!ensure())return;
+    const t0 = ctx.currentTime + (delay||0);
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type||'square';
+    o.frequency.setValueAtTime(freq,t0);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20,slideTo), t0+dur);
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(vol||0.25, t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g); g.connect(sfxGain);
+    o.start(t0); o.stop(t0+dur+0.03);
+  }
+  function noise(dur,vol,filterFreq,delay){
+    if(!ensure())return;
+    const t0 = ctx.currentTime + (delay||0);
+    const size = Math.max(1,Math.floor(ctx.sampleRate*dur));
+    const buf = ctx.createBuffer(1,size,ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<size;i++) data[i]=(Math.random()*2-1)*(1-i/size);
+    const src=ctx.createBufferSource(); src.buffer=buf;
+    const filt=ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=filterFreq||1800;
+    const g=ctx.createGain(); g.gain.value=vol||0.3;
+    src.connect(filt); filt.connect(g); g.connect(sfxGain);
+    src.start(t0);
+  }
+  const sfx = {
+    shoot(id){
+      if(id==='shotgun') tone(300,0.09,'square',0.22,140);
+      else if(id==='gatling') tone(760,0.035,'square',0.14,500);
+      else if(id==='rocket') { noise(0.12,0.3,700); tone(150,0.16,'sawtooth',0.22,60); }
+      else if(id==='beam') tone(1400,0.1,'sine',0.18,2200);
+      else if(id==='rail') { noise(0.14,0.4,4200); tone(2000,0.12,'square',0.22,3200); }
+      else tone(700,0.06,'square',0.18,380);
+    },
+    hit(){ tone(180,0.07,'square',0.16,90); },
+    kill(){ tone(520,0.13,'sawtooth',0.22,120); },
+    explode(){ noise(0.35,0.5,900); tone(90,0.32,'sine',0.28,38); vibrate(60); },
+    slash(){ noise(0.07,0.28,3200); },
+    hurt(){ tone(150,0.18,'sawtooth',0.3,55); vibrate(70); },
+    barrier(){ tone(320,0.3,'sine',0.24,760); vibrate([30,40,30]); },
+    weaponSwitch(){ tone(600,0.05,'square',0.16,1000); },
+    buy(){ tone(520,0.07,'square',0.18,880,0); tone(880,0.09,'square',0.18,0,0.07); },
+    levelup(){ tone(600,0.08,'square',0.2,900,0); tone(900,0.08,'square',0.2,1300,0.08); tone(1300,0.12,'square',0.22,0,0.16); },
+    bossAppear(){ tone(70,0.6,'sawtooth',0.35,55); noise(0.4,0.3,500); vibrate([100,60,100,60,160]); },
+    bossHit(){ tone(240,0.1,'square',0.22,150); },
+    stageClear(){ [660,880,1100].forEach((f,i)=>tone(f,0.18,'square',0.24,0,i*0.11)); vibrate([50,50,50,50,120]); },
+    gameOver(){ [440,340,220].forEach((f,i)=>tone(f,0.3,'sawtooth',0.28,0,i*0.16)); vibrate([200,80,200]); },
+    tap(){ tone(500,0.04,'square',0.12,0); },
+    burrow(){ noise(0.18,0.25,300); },
+    land(){ noise(0.14,0.35,500); vibrate(40); },
+  };
+
+  // 簡易な自動生成BGM: ベース+アルペジオのループ(西部劇風マイナー)
+  const bassSeq = [110,110,98,110, 87,87,98,98];
+  const leadSeq = [220,262,220,196, 174,196,220,196];
+  function musicStepFn(){
+    if(!ctx || !musicOn) return;
+    const i = musicStep % bassSeq.length;
+    tone(bassSeq[i], 0.32, 'triangle', 0.12, 0, 0);
+    if(i%2===0) tone(leadSeq[i], 0.18, 'square', 0.05, 0, 0.06);
+    if(i%4===3) noise(0.05,0.06,4000,0.24);
+    musicStep++;
+  }
+  function startMusic(){
+    if(!ensure())return;
+    if(musicTimer)return;
+    musicOn=true;
+    musicTimer=setInterval(musicStepFn, 300);
+  }
+  function stopMusicFn(){
+    musicOn=false;
+    if(musicTimer){ clearInterval(musicTimer); musicTimer=null; }
+  }
+  return { ensure, setMuted, sfx, startMusic, stopMusic:stopMusicFn };
+})();
+function stopMusic(){ Snd.stopMusic(); }
+
 /* ================= 武器データ ================= */
 const MAINS = [
  {id:'handgun', name:'ハンドガン',       price:0,    dmg:1,   rate:14, death:'normal',
@@ -244,20 +398,27 @@ const MAINS = [
   desc:'向いている方向へ一直線。ボス以外は一撃で貫き倒す。'},
 ];
 const SUBS = [
- {id:'punch',    name:'パンチ',       price:0,    dmg:2,  rate:24, range:55, death:'launch',
-  desc:'敵を空高く打ち上げる。最初から所持。'},
- {id:'knife',    name:'ナイフ',       price:200,  dmg:3,  rate:15, range:60, death:'slash',
-  desc:'素早い斬撃。敵を真っ二つに斬る。'},
- {id:'katana',   name:'刀',           price:600,  dmg:5,  rate:26, range:95, death:'slash',
-  desc:'広範囲の一閃。敵を両断する。'},
- {id:'chainsaw', name:'チェーンソー', price:1200, dmg:1.3, rate:6, range:65, death:'shred',
-  desc:'押しっぱなしで連続攻撃。敵を挽き潰す。'},
+ {id:'punch',    name:'パンチ',       price:0,    dmg:1,  rate:24, range:55, death:'launch', knock:12,
+  desc:'敵を空高く打ち上げ、少し遠ざける。最初から所持。'},
+ {id:'knife',    name:'ナイフ',       price:200,  dmg:3,  rate:15, range:60, death:'slash', knock:8,
+  desc:'素早い斬撃。敵を真っ二つに斬り、少し遠ざける。'},
+ {id:'katana',   name:'刀',           price:600,  dmg:5,  rate:26, range:95, death:'slash', knock:10,
+  desc:'広範囲の一閃。敵を両断し、少し遠ざける。'},
+ {id:'chainsaw', name:'チェーンソー', price:1200, dmg:1.3, rate:6, range:65, death:'shred', knock:6,
+  desc:'押しっぱなしで連続攻撃。敵を挽き潰し、少し遠ざける。'},
  {id:'barrier',  name:'バリア',       price:1000, barrier:true, dur:180, cd:720,
-  desc:'数秒間無敵になり敵を弾き飛ばす。Lvで持続時間UP。'},
+  desc:'数秒間無敵になり、その間は敵の動きも止まる。Lvで持続時間UP。'},
 ];
 const MAX_LV = 5;
 const lvMul = lv => 1 + 0.25*(lv-1);
 const upCost = (base, lv) => Math.round(Math.max(base,200) * 0.5 * lv);
+
+/* ================= ボスのセリフ(定型文) ================= */
+const DEFAULT_BOSS_LINES = {
+  appear: 'よくぞここまで来たな…だがここが貴様の墓場だ!\nこの縄張りは渡さんぞ!',
+  mid:    'まだまだ!\nこの程度か!\n舐めるなよ…!',
+  defeat: 'ばかな…この私が…\n覚えていろ…次は容赦せんぞ…'
+};
 
 /* ================= セーブデータ ================= */
 let sv = {
@@ -267,6 +428,8 @@ let sv = {
   eqMain: 'handgun',
   eqSub: 'punch',
   maxStage: 1,
+  bossLines: { appear:DEFAULT_BOSS_LINES.appear, mid:DEFAULT_BOSS_LINES.mid, defeat:DEFAULT_BOSS_LINES.defeat },
+  muted: false,
 };
 function saveGame(){
   try{ localStorage.setItem('photoInvasionSave', JSON.stringify(sv)); }catch(e){}
@@ -278,14 +441,21 @@ function loadGame(){
   }catch(e){}
   if (!sv.main.handgun) sv.main.handgun = {own:true, lv:1};
   if (!sv.sub.punch)    sv.sub.punch    = {own:true, lv:1};
+  if (!sv.bossLines) sv.bossLines = { appear:DEFAULT_BOSS_LINES.appear, mid:DEFAULT_BOSS_LINES.mid, defeat:DEFAULT_BOSS_LINES.defeat };
 }
 loadGame();
 
 /* ================= キャラ画像 ================= */
 const charCfg = {
   hero:  { mode:'face', faceImg:null, bodyImg:null },
-  enemy: { mode:'face', faceImg:null, bodyImg:null }
+  enemy: { mode:'face', faceImg:null, bodyImg:null },
+  boss:  { mode:'face', faceImg:null, bodyImg:null }
 };
+// ボス専用画像が未設定なら敵と同じ画像を使う
+function enemyCfg(e){
+  if(e.boss && (charCfg.boss.faceImg || charCfg.boss.bodyImg)) return charCfg.boss;
+  return charCfg.enemy;
+}
 function makeFaceCanvas(img){
   const size = 128, c = document.createElement('canvas');
   c.width = c.height = size;
@@ -394,8 +564,9 @@ function drawEnemy(g, footX, footY, dir, walk, cfg, flash, scale){
 /* ================= プレビュー ================= */
 const prevHero  = document.getElementById('prevHero').getContext('2d');
 const prevEnemy = document.getElementById('prevEnemy').getContext('2d');
+const prevBoss  = document.getElementById('prevBoss').getContext('2d');
 function drawPreviews(){
-  [[prevHero,'hero',drawHero],[prevEnemy,'enemy',drawEnemy]].forEach(([g,who,fn])=>{
+  [[prevHero,'hero',drawHero],[prevEnemy,'enemy',drawEnemy],[prevBoss,'boss',drawEnemy]].forEach(([g,who,fn])=>{
     g.clearRect(0,0,150,170);
     g.fillStyle='#2c3e57'; g.fillRect(0,0,150,170);
     g.fillStyle='#4a3b28'; g.fillRect(0,150,150,20);
@@ -420,6 +591,23 @@ function refreshTitle(){
     MAINS.find(m=>m.id===sv.eqMain).name+' + '+SUBS.find(s=>s.id===sv.eqSub).name;
 }
 refreshTitle();
+
+/* ================= サウンドON/OFF ================= */
+function updateMuteButtons(){
+  const icon = sv.muted ? '🔇' : '🔊';
+  document.getElementById('muteBtnTitle').textContent = icon+' サウンド'+(sv.muted?'OFF':'ON');
+  document.getElementById('btnMute').textContent = icon;
+}
+function toggleMute(){
+  Snd.ensure();
+  Snd.setMuted(!sv.muted);
+  saveGame();
+  updateMuteButtons();
+}
+document.getElementById('muteBtnTitle').onclick = toggleMute;
+document.getElementById('btnMute').addEventListener('touchstart', e=>{ e.preventDefault(); toggleMute(); }, {passive:false});
+document.getElementById('btnMute').addEventListener('mousedown', e=>{ e.preventDefault(); toggleMute(); });
+updateMuteButtons();
 
 /* ================= ショップ ================= */
 let shopTab='main', shopReturn='title';
@@ -491,14 +679,14 @@ function renderShop(){
       b.className='ibtn buy';
       b.textContent = unlocked ? ('購入 $'+d.price) : '未解放';
       b.disabled = !unlocked || sv.coins < d.price;
-      b.onclick=()=>{ sv.coins-=d.price; bag[d.id]={own:true,lv:1}; saveGame(); renderShop(); };
+      b.onclick=()=>{ sv.coins-=d.price; bag[d.id]={own:true,lv:1}; saveGame(); Snd.sfx.buy(); renderShop(); };
       row.appendChild(b);
     } else {
       const eb=document.createElement('button');
       if (eqId===d.id){ eb.className='ibtn equipped'; eb.textContent='装備中'; }
       else{
         eb.className='ibtn equip'; eb.textContent='装備する';
-        eb.onclick=()=>{ if(shopTab==='main') sv.eqMain=d.id; else sv.eqSub=d.id; saveGame(); renderShop(); };
+        eb.onclick=()=>{ if(shopTab==='main') sv.eqMain=d.id; else sv.eqSub=d.id; saveGame(); Snd.sfx.tap(); renderShop(); };
       }
       row.appendChild(eb);
       if (lv<MAX_LV){
@@ -506,7 +694,7 @@ function renderShop(){
         const ub=document.createElement('button');
         ub.className='ibtn up'; ub.textContent='Lv UP $'+cost;
         ub.disabled = sv.coins < cost;
-        ub.onclick=()=>{ sv.coins-=cost; st.lv++; saveGame(); renderShop(); };
+        ub.onclick=()=>{ sv.coins-=cost; st.lv++; saveGame(); Snd.sfx.levelup(); renderShop(); };
         row.appendChild(ub);
       }
     }
@@ -515,7 +703,12 @@ function renderShop(){
 }
 
 /* ================= 画面遷移 ================= */
-document.getElementById('goSetup').onclick=()=>{ scrTitle.classList.remove('show'); scrSetup.classList.add('show'); drawPreviews(); };
+document.getElementById('goSetup').onclick=()=>{
+  scrTitle.classList.remove('show'); scrSetup.classList.add('show'); drawPreviews();
+  document.getElementById('lineAppear').value = sv.bossLines.appear;
+  document.getElementById('lineMid').value    = sv.bossLines.mid;
+  document.getElementById('lineDefeat').value = sv.bossLines.defeat;
+};
 document.getElementById('setupDone').onclick=()=>{ scrSetup.classList.remove('show'); scrTitle.classList.add('show'); };
 document.getElementById('goEndless').onclick=()=>startGame('endless',1);
 document.getElementById('goStage').onclick =()=>startGame('stage', sv.maxStage);
@@ -523,12 +716,23 @@ document.getElementById('retryBtn').onclick=()=>{ ovOver.classList.remove('show'
 document.getElementById('nextBtn').onclick =()=>{ ovClear.classList.remove('show'); startGame('stage', stage+1); };
 document.getElementById('titleBtn').onclick=()=>{ ovOver.classList.remove('show'); toTitle(); };
 document.getElementById('clearTitleBtn').onclick=()=>{ ovClear.classList.remove('show'); toTitle(); };
-document.getElementById('resumeBtn').onclick=()=>{ ovPause.classList.remove('show'); paused=false; };
+document.getElementById('resumeBtn').onclick=()=>{ ovPause.classList.remove('show'); paused=false; Snd.sfx.tap(); };
 document.getElementById('quitBtn').onclick =()=>{ ovPause.classList.remove('show'); paused=false; bankCoins(); toTitle(); };
-function toTitle(){ controls.classList.remove('show'); running=false; scrTitle.classList.add('show'); refreshTitle(); }
+document.getElementById('hideUiBtn').onclick=()=>{
+  ovPause.classList.add('hide-ui');
+  controls.classList.remove('show');
+  document.getElementById('showUiTab').classList.add('show');
+};
+document.getElementById('showUiTab').onclick=()=>{
+  ovPause.classList.remove('hide-ui');
+  controls.classList.add('show');
+  document.getElementById('showUiTab').classList.remove('show');
+};
+function toTitle(){ controls.classList.remove('show'); running=false; scrTitle.classList.add('show'); refreshTitle(); stopMusic(); }
 
 document.getElementById('fileHero').onchange =e=>{ if(e.target.files[0]) loadPhoto('hero', e.target.files[0]); e.target.value=''; };
 document.getElementById('fileEnemy').onchange=e=>{ if(e.target.files[0]) loadPhoto('enemy',e.target.files[0]); e.target.value=''; };
+document.getElementById('fileBoss').onchange =e=>{ if(e.target.files[0]) loadPhoto('boss', e.target.files[0]); e.target.value=''; };
 document.querySelectorAll('.mode-btn').forEach(b=>{
   b.onclick=()=>{
     charCfg[b.dataset.who].mode=b.dataset.mode;
@@ -536,9 +740,25 @@ document.querySelectorAll('.mode-btn').forEach(b=>{
     drawPreviews();
   };
 });
-document.querySelectorAll('.reset-btn').forEach(b=>{
+document.querySelectorAll('.reset-btn[data-reset]').forEach(b=>{
   b.onclick=()=>{ const c=charCfg[b.dataset.reset]; c.faceImg=null; c.bodyImg=null; drawPreviews(); };
 });
+document.getElementById('saveLines').onclick=()=>{
+  sv.bossLines.appear = document.getElementById('lineAppear').value || DEFAULT_BOSS_LINES.appear;
+  sv.bossLines.mid    = document.getElementById('lineMid').value    || DEFAULT_BOSS_LINES.mid;
+  sv.bossLines.defeat = document.getElementById('lineDefeat').value || DEFAULT_BOSS_LINES.defeat;
+  saveGame();
+  const btn=document.getElementById('saveLines');
+  const orig=btn.textContent; btn.textContent='保存しました';
+  setTimeout(()=>{ btn.textContent=orig; },1200);
+};
+document.getElementById('resetLines').onclick=()=>{
+  sv.bossLines = { appear:DEFAULT_BOSS_LINES.appear, mid:DEFAULT_BOSS_LINES.mid, defeat:DEFAULT_BOSS_LINES.defeat };
+  document.getElementById('lineAppear').value = sv.bossLines.appear;
+  document.getElementById('lineMid').value    = sv.bossLines.mid;
+  document.getElementById('lineDefeat').value = sv.bossLines.defeat;
+  saveGame();
+};
 
 /* ================= 入力 ================= */
 const input={left:false,right:false,sub:false,fire:false};
@@ -578,19 +798,34 @@ function cycleWeapon(){
   const i = owned.findIndex(m=>m.id===sv.eqMain);
   sv.eqMain = owned[(i+1)%owned.length].id;
   saveGame();
+  Snd.sfx.weaponSwitch();
   addFloat(player.x, player.y-120, MAINS.find(m=>m.id===sv.eqMain).name, '#8fd2ff');
 }
 
 /* ================= ゲーム状態 ================= */
 let running=false, paused=false;
 let mode='endless', stage=1, stageTarget=0, stageKills=0, bossSpawned=false;
-let player, enemies, bullets, deaths, particles, floats, rings, beams, swings;
+let player, enemies, bullets, deaths, particles, floats, rings, beams, swings, bloodPools;
 let kills, earned, wave, spawnT, time, shake;
+let bossSpeech=null, bossPos=null, bossDefeatDelay=0;
 
 function curMain(){ return MAINS.find(m=>m.id===sv.eqMain); }
 function curSub(){ return SUBS.find(s=>s.id===sv.eqSub); }
 function mainLv(){ const s=sv.main[sv.eqMain]; return s?s.lv:1; }
 function subLv(){ const s=sv.sub[sv.eqSub]; return s?s.lv:1; }
+
+// ボスのセリフ選択
+function pickLine(key){
+  const raw = (sv.bossLines && sv.bossLines[key]) || '';
+  const arr = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!arr.length) return '';
+  return arr[Math.floor(Math.random()*arr.length)];
+}
+function sayBoss(key, life){
+  const t = pickLine(key);
+  if(!t) return;
+  bossSpeech = { text:t, life: life||150 };
+}
 
 function startGame(m, st){
   mode=m; stage=st||1;
@@ -598,9 +833,10 @@ function startGame(m, st){
   controls.classList.add('show');
   player={x:W/2,y:GROUND,dir:1,hp:5,maxHp:5,cool:0,subCool:0,hurt:0,walk:0,
           barrier:0,barrierCd:0};
-  enemies=[];bullets=[];deaths=[];particles=[];floats=[];rings=[];beams=[];swings=[];
+  enemies=[];bullets=[];deaths=[];particles=[];floats=[];rings=[];beams=[];swings=[];bloodPools=[];
   kills=0;earned=0;wave=1;time=0;shake=0;
   stageKills=0;bossSpawned=false;
+  bossSpeech=null;bossPos=null;bossDefeatDelay=0;
   if(mode==='stage'){
     stageTarget = (stage%5===0) ? 0 : 8 + stage*3;   // 5の倍数はボス戦
     spawnT=50;
@@ -609,6 +845,7 @@ function startGame(m, st){
     spawnT=60;
   }
   running=true;paused=false;
+  Snd.ensure(); Snd.startMusic();
   requestAnimationFrame(loop);
 }
 
@@ -638,7 +875,7 @@ function spawnEnemy(boss){
     x: side<0?-50:W+50, y:GROUND, dir:side<0?1:-1,
     hp, maxHp:hp, spd, scale, touch, kind,
     walk:Math.random()*6, flash:0, knock:0, boss:!!boss,
-    state:'walk', t:0, vy:0
+    state:'walk', t:0, vy:0, midSaid:new Set()
   };
   if(kind==='burrower'){
     // 地面から這い出る。プレイヤーから一定距離を空けて出現
@@ -648,6 +885,7 @@ function spawnEnemy(boss){
     e.state='emerge'; e.t=75; e.emergeMax=75;
     e.hp = Math.round(e.hp*1.3); e.maxHp=e.hp;   // 硬め
     e.spd *= 1.15;
+    Snd.sfx.burrow();
   } else if(kind==='diver'){
     // 空から落下。真上は避けて左右にずらす
     const sd = Math.random()<.5?-1:1;
@@ -657,6 +895,11 @@ function spawnEnemy(boss){
     e.spd *= 1.35;   // 素早い
   }
   enemies.push(e);
+  if(boss){
+    bossPos = {x:e.x, y:e.y};
+    sayBoss('appear', 200);
+    Snd.sfx.bossAppear();
+  }
 }
 
 function addFloat(x,y,text,color){ floats.push({x,y,text,color,life:55}); }
@@ -678,7 +921,7 @@ function snapshotEnemy(e){
   const s=e.scale, w=Math.ceil(200*s), h=Math.ceil(120*s);
   const c=document.createElement('canvas');
   c.width=w;c.height=h;
-  drawEnemy(c.getContext('2d'), w/2, h-4, e.dir, e.walk, charCfg.enemy, 0, s);
+  drawEnemy(c.getContext('2d'), w/2, h-4, e.dir, e.walk, enemyCfg(e), 0, s);
   return c;
 }
 function killEnemy(e, deathType, hitDir){
@@ -686,14 +929,20 @@ function killEnemy(e, deathType, hitDir){
   const gain = (e.boss ? 300+stage*40 : 20+Math.floor(Math.random()*30)+(mode==='stage'?stage*2:Math.floor(kills/5)));
   earned += gain;
   addFloat(e.x, e.y-110*e.scale, '+$'+gain, '#ffd94a');
+  Snd.sfx.kill();
   const snap=snapshotEnemy(e);
   const d={type:deathType, snap, w:snap.width, h:snap.height,
            x:e.x, y:e.y, vx:0, vy:0, rot:0, vr:0, life:60, alpha:1, dir:hitDir||1, tiles:null, stretch:1};
+  const by=e.y-45*e.scale;
   switch(deathType){
     case 'normal':
-      d.vr = -hitDir*0.06; d.life=45; break;
+      d.vr = -hitDir*0.06; d.life=45;
+      bloodSpray(e.x,by,e.scale,1.1); addBloodPool(e.x,e.scale);
+      break;
     case 'knockback':
-      d.vx=hitDir*9; d.vy=-5; d.vr=hitDir*.35; d.life=45; break;
+      d.vx=hitDir*9; d.vy=-5; d.vr=hitDir*.35; d.life=45;
+      bloodSpray(e.x,by,e.scale,1.4); addBloodPool(e.x,e.scale);
+      break;
     case 'shred': {
       d.tiles=[]; const N=4;
       for(let i=0;i<N;i++)for(let j=0;j<N;j++){
@@ -702,25 +951,35 @@ function killEnemy(e, deathType, hitDir){
           vx:(Math.random()-.5)*7+hitDir*2, vy:-2-Math.random()*5,
           rot:0, vr:(Math.random()-.5)*.5});
       }
-      d.life=55; break;
+      d.life=55;
+      bloodSpray(e.x,by,e.scale,2.2); bloodSpray(e.x,by,e.scale,1.6);
+      addBloodPool(e.x,e.scale); addBloodPool(e.x+14*e.scale,e.scale*.7);
+      break;
     }
     case 'explode':
       d.vx=hitDir*3; d.vy=-11; d.vr=hitDir*.45; d.life=65;
       rings.push({x:e.x,y:e.y-40*e.scale,r:8,maxR:90,life:22,color:'#ff8a3a'});
       burst(e.x,e.y-40*e.scale,'#ff8a3a',18,1.6);
       burst(e.x,e.y-40*e.scale,'#ffd94a',10,1.3);
+      bloodSpray(e.x,by,e.scale,1.8); addBloodPool(e.x,e.scale);
       shake=Math.max(shake,10);
       break;
     case 'ash':
-      d.life=55; break;
+      d.life=55; break;   // 灰化なので血しぶきなし
     case 'pierce':
-      d.life=16; burst(e.x,e.y-50*e.scale,'#7ae7ff',14,1.4); break;
+      d.life=16; burst(e.x,e.y-50*e.scale,'#7ae7ff',14,1.4);
+      bloodSpray(e.x,by,e.scale,0.8);
+      break;
     case 'launch':
-      d.vx=hitDir*5; d.vy=-15; d.vr=hitDir*.4; d.life=90; break;
+      d.vx=hitDir*5; d.vy=-15; d.vr=hitDir*.4; d.life=90;
+      bloodSpray(e.x,by,e.scale,1.0); addBloodPool(e.x,e.scale*.7);
+      break;
     case 'slash':
       d.life=50; d.halves=[
         {x:e.x-2,y:e.y,vx:-2.4,vy:-3,rot:0,vr:-.09,side:0},
         {x:e.x+2,y:e.y,vx: 2.4,vy:-2,rot:0,vr:.09,side:1}];
+      bloodSpray(e.x,by,e.scale,2.0); bloodSpray(e.x,by,e.scale,1.4);
+      addBloodPool(e.x-10*e.scale,e.scale*.8); addBloodPool(e.x+10*e.scale,e.scale*.8);
       break;
   }
   deaths.push(d);
@@ -729,7 +988,11 @@ function killEnemy(e, deathType, hitDir){
   if(mode==='endless' && kills%10===0){ wave++; addFloat(W/2,120,'WAVE '+wave+' !','#5be36b'); }
   if(mode==='stage'){
     stageKills++;
-    if(e.boss) stageClear();
+    if(e.boss){
+      sayBoss('defeat',210); bossPos={x:e.x,y:e.y};
+      Snd.stopMusic(); Snd.sfx.stageClear();
+      bossDefeatDelay = 170;
+    }
     else if(!isBossStage() && stageKills>=stageTarget) stageClear();
   }
 }
@@ -824,6 +1087,7 @@ function fireMain(){
   const dmg=w.dmg*lvMul(lv);
   const bx=player.x+player.dir*30*PS, by=player.y-58*PS;
   burst(bx+player.dir*6,by,'#ffd94a',3);
+  Snd.sfx.shoot(w.id);
 
   if(w.oneShot){
     // レールガン: 向いている方向へ一直線。ボス以外は一撃で撃破
@@ -865,10 +1129,26 @@ function fireMain(){
       dmg, wpn:w, hit:new Set()});
   }
 }
+// 被弾時の血しぶき(赤い粒子)。撃破時killEnemyの方でさらに強めの演出を追加
+function bloodSpray(x,y,scale,power){
+  power=power||1;
+  burst(x,y,'#8a0f16',4*power,1.1*power);
+  burst(x,y,'#d21f2b',3*power,0.9*power);
+}
+function addBloodPool(x,scale){
+  bloodPools.push({x, r:(22+Math.random()*14)*scale*(0.75+Math.random()*0.5), life:420, max:420});
+}
 function hitEnemy(e,dmg,deathType,hitDir,knock){
   e.hp-=dmg; e.flash=6;
   if(knock && e.state==='walk') e.knock=hitDir*knock;
-  burst(e.x,e.y-55*e.scale,'#38f28d',5);
+  bloodSpray(e.x,e.y-55*e.scale,e.scale,0.6);
+  Snd.sfx.hit();
+  if(e.boss){
+    const ratio=Math.max(0,e.hp)/e.maxHp;
+    [0.75,0.5,0.25].forEach(t=>{
+      if(ratio<=t && !e.midSaid.has(t)){ e.midSaid.add(t); sayBoss('mid',140); bossPos={x:e.x,y:e.y}; Snd.sfx.bossHit(); }
+    });
+  }
   if(e.hp<=0){ e.hp=0; killEnemy(e,deathType,hitDir); }
 }
 
@@ -880,6 +1160,7 @@ function useSub(){
     player.barrier = s.dur + (lv-1)*45;
     player.barrierCd = s.cd;
     rings.push({x:player.x,y:player.y-50*PS,r:10,maxR:70*PS,life:18,color:'#7ab8ff'});
+    Snd.sfx.barrier();
     return;
   }
   if(player.subCool>0)return;
@@ -887,11 +1168,12 @@ function useSub(){
   const dmg=s.dmg*lvMul(lv);
   const range=s.range*PS;
   swings.push({x:player.x,y:player.y-55*PS,dir:player.dir,life:10,range,wpn:s.id});
+  Snd.sfx.slash();
   for(const e of enemies){
     if(!canHit(e))continue;
     const dx=(e.x-player.x)*player.dir;
     if(dx>-10 && dx<range+18*e.scale && Math.abs(e.y-player.y)<34){
-      hitEnemy(e,dmg,s.death,player.dir, s.id==='punch'?10:4);
+      hitEnemy(e,dmg,s.death,player.dir, s.knock||6);
     }
   }
 }
@@ -925,6 +1207,7 @@ function update(){
           burst(b.x,b.y,'#ffe97a',6,1.6);
           burst(b.x,b.y,'#ff8a3a',12,1.3);
           shake=Math.max(shake,9);
+          Snd.sfx.explode();
           for(const e2 of enemies){
             if(!canHit(e2))continue;
             if(Math.abs(e2.x-b.x)<b.wpn.splash && Math.abs((e2.y-50*e2.scale)-b.y)<b.wpn.splash){
@@ -954,6 +1237,21 @@ function update(){
   // 敵
   for(const e of enemies){
     if(e.flash>0)e.flash--;
+    if(e.boss) bossPos = {x:e.x, y:e.y};
+
+    // バリア展開中: 全ての敵の動きを停止(近くにいれば弾き飛ばしのみ動く)
+    if(player.barrier>0){
+      if(e.state==='walk'){
+        const d=Math.abs(e.x-player.x);
+        if(d<70*PS){
+          e.knock=Math.sign(e.x-player.x||1)*8; burst(e.x,e.y-50,'#7ab8ff',4);
+        } else if(e.knock!==0){
+          e.x+=e.knock; e.knock*=.72; if(Math.abs(e.knock)<.3)e.knock=0;
+        }
+      }
+      // emerge/fall のタイマーもそのまま停止(時間が進まない)
+      continue;
+    }
 
     // 這い出し中: 地中でせり上がるだけ。無敵で移動しない
     if(e.state==='emerge'){
@@ -978,10 +1276,12 @@ function update(){
         shake=Math.max(shake,9);
         burst(e.x, GROUND-4, '#8a6b45', 14, 1.3);
         rings.push({x:e.x,y:GROUND-4,r:6,maxR:55,life:16,color:'rgba(180,150,110,.9)'});
+        Snd.sfx.land();
         // 着地の衝撃で近くにいるとダメージ
-        if(player.hurt<=0 && player.barrier<=0 && Math.abs(e.x-player.x)<52){
+        if(player.hurt<=0 && Math.abs(e.x-player.x)<52){
           player.hp-=1; player.hurt=70; shake=12;
           burst(player.x,player.y-50*PS,'#ff4a4a',10);
+          Snd.sfx.hurt();
           if(player.hp<=0){player.hp=0;gameOver();}
         }
       }
@@ -995,20 +1295,13 @@ function update(){
       }
     }
 
-    // バリア: 弾き飛ばす
-    if(player.barrier>0){
-      const d=Math.abs(e.x-player.x);
-      if(d<70*PS && e.state==='walk'){
-        e.knock=Math.sign(e.x-player.x||1)*8; burst(e.x,e.y-50,'#7ab8ff',4);
-      }
-      continue;
-    }
     // 接触ダメージ(落下中の敵は上から重なった時にも当たる)
     const dx=Math.abs(e.x-player.x);
     const dy=e.y-player.y;
     if(player.hurt<=0 && dx<18*PS+10*e.scale && dy>-105*PS && dy<25){
       player.hp-=e.touch; player.hurt=70; shake=10;
       burst(player.x,player.y-50*PS,'#ff4a4a',10);
+      Snd.sfx.hurt();
       if(player.hp<=0){player.hp=0;gameOver();}
     }
   }
@@ -1036,6 +1329,9 @@ function update(){
   rings=rings.filter(r=>{r.r+=(r.maxR-r.r)*.25;return --r.life>0;});
   beams=beams.filter(b=>--b.life>0);
   swings=swings.filter(s=>--s.life>0);
+  bloodPools=bloodPools.filter(p=>--p.life>0);
+  if(bossSpeech){ bossSpeech.life--; if(bossSpeech.life<=0) bossSpeech=null; }
+  if(bossDefeatDelay>0){ bossDefeatDelay--; if(bossDefeatDelay===0) stageClear(); }
   if(shake>0)shake--;
 }
 
@@ -1048,6 +1344,7 @@ function gameOver(){
   running=false;
   controls.classList.remove('show');
   bankCoins();
+  Snd.stopMusic(); Snd.sfx.gameOver();
   document.getElementById('overStat').innerHTML =
     (mode==='stage'?('STAGE '+stage+'<br>'):'')+
     '撃破数 <b>'+kills+'</b><br>獲得コイン <b>$'+_lastEarned+'</b>'+
@@ -1061,6 +1358,8 @@ function stageClear(){
   bankCoins();
   if(stage+1>sv.maxStage){ sv.maxStage=stage+1; }
   saveGame();
+  Snd.stopMusic();
+  if(!isBossStage()) Snd.sfx.stageClear();   // ボス撃破時は killEnemy 側で既に再生済み
   document.getElementById('clearStat').innerHTML =
     'STAGE '+stage+' クリア!<br>撃破数 <b>'+kills+'</b><br>獲得コイン <b>$'+_lastEarned+'</b><br>所持コイン <b>$'+sv.coins+'</b>';
   ovClear.classList.add('show');
@@ -1170,6 +1469,13 @@ function loop(){
     ctx.save();
     if(shake>0)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
     drawBG();
+    // 血だまり(地面の血痕。時間とともにフェード)
+    for(const p of bloodPools){
+      ctx.globalAlpha = Math.min(0.5, p.life/p.max*0.55);
+      ctx.fillStyle='#5c0f13';
+      ctx.beginPath(); ctx.ellipse(p.x, GROUND+4, p.r, p.r*0.32, 0, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha=1;
+    }
     // レールガン/ビームガンのビーム
     for(const b of beams){
       const y1=b.y1!==undefined?b.y1:b.y, y2=b.y2!==undefined?b.y2:b.y;
@@ -1215,7 +1521,7 @@ function loop(){
         const p = 1 - e.t/e.emergeMax;
         ctx.save();
         ctx.beginPath(); ctx.rect(0,0,W,GROUND+2); ctx.clip();
-        drawEnemy(ctx, e.x, GROUND + (1-p)*185*e.scale/ES, e.dir, e.walk, charCfg.enemy, e.flash, e.scale);
+        drawEnemy(ctx, e.x, GROUND + (1-p)*185*e.scale/ES, e.dir, e.walk, enemyCfg(e), e.flash, e.scale);
         ctx.restore();
         // 盛り上がった土
         ctx.fillStyle='#6b5334';
@@ -1224,7 +1530,7 @@ function loop(){
         ctx.fill();
         continue;
       }
-      drawEnemy(ctx,e.x,e.y,e.dir,e.walk,charCfg.enemy,e.flash,e.scale);
+      drawEnemy(ctx,e.x,e.y,e.dir,e.walk,enemyCfg(e),e.flash,e.scale);
       if(e.hp<e.maxHp){
         const bw=40*e.scale;
         ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(e.x-bw/2,e.y-112*e.scale,bw,5);
@@ -1267,8 +1573,50 @@ function loop(){
     ctx.globalAlpha=1;
     ctx.restore();
     drawHUD();
+    drawBossSpeech();
   }
   requestAnimationFrame(loop);
+}
+
+/* ================= ボスのセリフ表示 ================= */
+function roundRect(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y);
+  g.arcTo(x+w,y,x+w,y+h,r);
+  g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r);
+  g.arcTo(x,y,x+w,y,r);
+  g.closePath();
+}
+function wrapText(g,text,x,y,maxChars,lh){
+  const lines=[];
+  for(let i=0;i<text.length;i+=maxChars) lines.push(text.slice(i,i+maxChars));
+  const show=lines.slice(0,2);
+  if(lines.length>2) show[1]=show[1].slice(0,Math.max(0,maxChars-1))+'…';
+  const startY = y - (show.length-1)*lh/2;
+  show.forEach((ln,i)=>g.fillText(ln, x, startY+i*lh));
+}
+function drawBossSpeech(){
+  if(!bossSpeech) return;
+  const a = bossSpeech.life>18 ? 1 : bossSpeech.life/18;
+  const bx=18, by=62, bw=W-36, bh=56;
+  ctx.globalAlpha=a;
+  ctx.fillStyle='rgba(10,14,24,.85)';
+  roundRect(ctx,bx,by,bw,bh,14); ctx.fill();
+  ctx.strokeStyle='#ff5a4a'; ctx.lineWidth=2;
+  roundRect(ctx,bx,by,bw,bh,14); ctx.stroke();
+  // アバター(ボス専用画像があればそれを使用)
+  const bc = (charCfg.boss.faceImg||charCfg.boss.bodyImg) ? charCfg.boss : charCfg.enemy;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(bx+34, by+bh/2, 21, 0, Math.PI*2); ctx.clip();
+  if(bc.faceImg){ ctx.drawImage(bc.faceImg, bx+13, by+bh/2-21, 42,42); }
+  else{ ctx.fillStyle='#a06bc9'; ctx.fillRect(bx+13,by+bh/2-21,42,42); }
+  ctx.restore();
+  ctx.strokeStyle='#ff5a4a'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(bx+34, by+bh/2, 21, 0, Math.PI*2); ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.textAlign='left';
+  wrapText(ctx, bossSpeech.text, bx+68, by+bh/2, 24, 19);
+  ctx.globalAlpha=1;
 }
 </script>
 </body>
