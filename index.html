@@ -113,6 +113,12 @@
     border-radius:18px;padding:16px 26px;display:flex;flex-direction:column;align-items:center;gap:10px;
     box-shadow:0 8px 22px rgba(0,0,0,.55);}
   #ovPause .pause-card h2{font-size:22px;color:var(--ui);margin:0;}
+  #ovWeaponSelect .pause-card h2{font-size:19px;color:var(--ui);margin:0;}
+  .weapon-opt{width:100%;background:#233650;border:2px solid #3d5270;border-radius:12px;
+    padding:10px 14px;display:flex;justify-content:space-between;align-items:center;
+    color:#dbe6f5;font-size:14px;font-weight:bold;cursor:pointer;}
+  .weapon-opt.cur{border-color:var(--green);background:#1c3a28;}
+  .weapon-opt .lv{color:var(--ui);font-size:12px;}
   #ovPause.hide-ui{display:none;}
   #showUiTab{position:fixed;top:10px;left:10px;z-index:31;display:none;
     background:rgba(15,24,38,.85);color:#dbe6f5;border:1px solid #3d5270;border-radius:10px;
@@ -232,6 +238,15 @@
   </div>
 </div>
 <button id="showUiTab">タップで表示に戻す</button>
+
+<!-- 武器選択(一時停止して選ぶ) -->
+<div class="overlay" id="ovWeaponSelect">
+  <div class="pause-card" style="max-width:320px;width:88vw;">
+    <h2>メイン武器を選択</h2>
+    <div id="weaponSelectList" style="display:flex;flex-direction:column;gap:8px;width:100%;"></div>
+    <button class="btn sub" id="weaponSelectClose">閉じる</button>
+  </div>
+</div>
 
 <!-- ステージクリア -->
 <div class="overlay" id="ovClear">
@@ -385,11 +400,11 @@ function stopMusic(){ Snd.stopMusic(); }
 const MAINS = [
  {id:'handgun', name:'ハンドガン',       price:0,    dmg:1,   rate:14, death:'normal',
   desc:'標準的な連射力。最初から所持。'},
- {id:'shotgun', name:'ショットガン',     price:300,  dmg:1,   rate:32, death:'knockback', pellets:3, spread:.14, knock:0,
+ {id:'gatling', name:'ガトリングガン',   price:300,  dmg:.7,  rate:5,  death:'shred',
+  desc:'超高速連射。敵を粉々に引き裂く。'},
+ {id:'shotgun', name:'ショットガン',     price:800,  dmg:1,   rate:32, death:'knockback', pellets:3, spread:.14, knock:0,
   closeRange:110, closeMul:2, closeKnock:22,
   desc:'3方向に拡散。至近距離で撃つと威力2倍になり敵を突き放す。'},
- {id:'gatling', name:'ガトリングガン',   price:800,  dmg:.7,  rate:5,  death:'shred',
-  desc:'超高速連射。敵を粉々に引き裂く。'},
  {id:'rocket',  name:'ロケットランチャー', price:1500, dmg:6,   rate:48, death:'explode', splash:85,
   desc:'着弾点で小さく爆発。範囲内の敵をまとめて爆殺。'},
  {id:'beam',    name:'ビームガン',       price:2500, dmg:4,   rate:30, death:'ash', autoBeam:true, maxTargets:5,
@@ -772,7 +787,7 @@ function bindPad(id,key,tapFn){
 }
 bindPad('btnL','left'); bindPad('btnR','right');
 bindPad('btnS','sub'); bindPad('btnF','fire');
-bindPad('btnW',null,cycleWeapon);
+bindPad('btnW',null,openWeaponSelect);
 document.getElementById('btnPause').addEventListener('touchstart',e=>{e.preventDefault();togglePause();},{passive:false});
 document.getElementById('btnPause').addEventListener('mousedown',e=>{e.preventDefault();togglePause();});
 
@@ -781,7 +796,7 @@ addEventListener('keydown',e=>{
   if(e.key==='ArrowRight')input.right=true;
   if(e.key==='z'||e.key==='Z')input.fire=true;
   if(e.key==='x'||e.key==='X')input.sub=true;
-  if(e.key==='c'||e.key==='C')cycleWeapon();
+  if(e.key==='c'||e.key==='C')openWeaponSelect();
   if(e.key==='Escape'||e.key==='p')togglePause();
 });
 addEventListener('keyup',e=>{
@@ -791,16 +806,43 @@ addEventListener('keyup',e=>{
   if(e.key==='x'||e.key==='X')input.sub=false;
 });
 function togglePause(){ if(!running)return; paused=!paused; ovPause.classList.toggle('show',paused); }
-function cycleWeapon(){
+
+/* ================= 武器選択(一時停止して選ぶ) ================= */
+const ovWeaponSelect = document.getElementById('ovWeaponSelect');
+function openWeaponSelect(){
   if(!running)return;
   const owned = MAINS.filter(m=>sv.main[m.id] && sv.main[m.id].own);
   if(owned.length<2)return;
-  const i = owned.findIndex(m=>m.id===sv.eqMain);
-  sv.eqMain = owned[(i+1)%owned.length].id;
-  saveGame();
-  Snd.sfx.weaponSwitch();
-  addFloat(player.x, player.y-120, MAINS.find(m=>m.id===sv.eqMain).name, '#8fd2ff');
+  paused=true;
+  renderWeaponSelect();
+  ovWeaponSelect.classList.add('show');
+  Snd.sfx.tap();
 }
+function closeWeaponSelect(){
+  ovWeaponSelect.classList.remove('show');
+  paused=false;
+}
+function renderWeaponSelect(){
+  const list=document.getElementById('weaponSelectList');
+  list.innerHTML='';
+  const owned = MAINS.filter(m=>sv.main[m.id] && sv.main[m.id].own);
+  owned.forEach(m=>{
+    const lv = sv.main[m.id].lv;
+    const isCur = sv.eqMain===m.id;
+    const b=document.createElement('div');
+    b.className='weapon-opt'+(isCur?' cur':'');
+    b.innerHTML = '<span>'+m.name+'</span><span class="lv">Lv'+lv+(isCur?' ・装備中':'')+'</span>';
+    b.onclick=()=>{
+      if(!isCur){
+        sv.eqMain=m.id; saveGame(); Snd.sfx.weaponSwitch();
+        addFloat(player.x, player.y-120, m.name, '#8fd2ff');
+      }
+      closeWeaponSelect();
+    };
+    list.appendChild(b);
+  });
+}
+document.getElementById('weaponSelectClose').onclick=closeWeaponSelect;
 
 /* ================= ゲーム状態 ================= */
 let running=false, paused=false;
