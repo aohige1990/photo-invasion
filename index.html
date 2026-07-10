@@ -385,9 +385,9 @@ function stopMusic(){ Snd.stopMusic(); }
 const MAINS = [
  {id:'handgun', name:'ハンドガン',       price:0,    dmg:1,   rate:14, death:'normal',
   desc:'標準的な連射力。最初から所持。'},
- {id:'shotgun', name:'ショットガン',     price:300,  dmg:1,   rate:32, death:'knockback', pellets:3, spread:.14, knock:14,
+ {id:'shotgun', name:'ショットガン',     price:300,  dmg:1,   rate:32, death:'knockback', pellets:3, spread:.14, knock:0,
   closeRange:110, closeMul:2, closeKnock:22,
-  desc:'3方向に拡散。至近距離で撃つと威力2倍になり敵を大きく突き放す。'},
+  desc:'3方向に拡散。至近距離で撃つと威力2倍になり敵を突き放す。'},
  {id:'gatling', name:'ガトリングガン',   price:800,  dmg:.7,  rate:5,  death:'shred',
   desc:'超高速連射。敵を粉々に引き裂く。'},
  {id:'rocket',  name:'ロケットランチャー', price:1500, dmg:6,   rate:48, death:'explode', splash:85,
