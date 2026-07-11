@@ -149,23 +149,8 @@
   <button class="btn green" id="goShop">ショップ</button>
   <button class="btn sub" id="goSetup">キャラ設定</button>
   <button class="btn sub" id="goBackup">データのバックアップ</button>
-  <button class="btn sub" id="goMgTest">ミニゲームをテスト</button>
   <button class="btn sub" id="muteBtnTitle">🔊 サウンドON</button>
   <p class="hint" id="titleInfo"></p>
-</div>
-
-<!-- ミニゲームテスト選択 -->
-<div class="screen" id="scrMgTest">
-  <h1 style="font-size:clamp(20px,5vw,30px);">ミニゲームをテスト</h1>
-  <p class="hint">ボスを倒さなくても好きなミニゲームを直接試せます(コインボーナスは加算されません)。</p>
-  <div style="display:flex;flex-direction:column;gap:10px;width:min(420px,90vw);">
-    <button class="btn green" id="mgt1">① 顔ハメ神経衰弱</button>
-    <button class="btn green" id="mgt2">② 顔ハメもぐら叩き</button>
-    <button class="btn green" id="mgt3">③ 顔ハメ福笑い</button>
-    <button class="btn green" id="mgt4">④ 顔ハメだるまさんがころんだ</button>
-    <button class="btn green" id="mgt5">⑤ 顔ハメ横スクロール</button>
-  </div>
-  <button class="btn sub" id="mgTestBack">タイトルへ戻る</button>
 </div>
 
 <!-- バックアップ -->
@@ -666,7 +651,6 @@ const scrSetup=document.getElementById('scrSetup');
 const scrShop =document.getElementById('scrShop');
 const scrBackup=document.getElementById('scrBackup');
 const scrMinigame=document.getElementById('scrMinigame');
-const scrMgTest=document.getElementById('scrMgTest');
 const controls=document.getElementById('controls');
 const ovPause =document.getElementById('ovPause');
 const ovOver  =document.getElementById('ovOver');
@@ -1767,14 +1751,6 @@ function startMinigame(type, returnMode, titleSuffix){
   MG_INIT[type]();
   requestAnimationFrame(mgLoop);
 }
-function startMinigameTest(type){
-  startMinigame(type, 'title', MG_NAMES[type]+'(テストプレイ)');
-}
-[1,2,3,4,5].forEach(i=>{
-  document.getElementById('mgt'+i).onclick=()=>{ scrMgTest.classList.remove('show'); startMinigameTest(i); };
-});
-document.getElementById('goMgTest').onclick=()=>{ scrTitle.classList.remove('show'); scrMgTest.classList.add('show'); };
-document.getElementById('mgTestBack').onclick=()=>{ scrMgTest.classList.remove('show'); scrTitle.classList.add('show'); };
 function mgLoop(){
   if(!mgRunning) return;
   MG_UPDATE[mgType]();
