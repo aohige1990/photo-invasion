@@ -129,6 +129,14 @@
     color:#dbe6f5;font-size:14px;font-weight:bold;cursor:pointer;}
   .weapon-opt.cur{border-color:var(--green);background:#1c3a28;}
   .weapon-opt .lv{color:var(--ui);font-size:12px;}
+  .mg-card{width:100%;background:#1b2b44;border:2px solid #34496b;border-radius:14px;
+    padding:14px 16px;display:flex;flex-direction:column;gap:8px;text-align:left;}
+  .mg-card.locked{opacity:.55;border-style:dashed;}
+  .mg-card .mg-name{color:#fff;font-size:16px;font-weight:bold;}
+  .mg-card .mg-req{color:#8fa5c4;font-size:12px;}
+  .mg-card .mg-best{color:#ffd94a;font-size:12px;}
+  .mg-play-btn{align-self:flex-end;background:var(--green);color:#08240f;border:none;
+    border-radius:9px;padding:8px 20px;font-size:13px;font-weight:bold;cursor:pointer;}
   #ovPause.hide-ui{display:none;}
   #showUiTab{position:fixed;top:10px;left:10px;z-index:31;display:none;
     background:rgba(15,24,38,.85);color:#dbe6f5;border:1px solid #3d5270;border-radius:10px;
@@ -149,8 +157,17 @@
   <button class="btn green" id="goShop">ショップ</button>
   <button class="btn sub" id="goSetup">キャラ設定</button>
   <button class="btn sub" id="goBackup">データのバックアップ</button>
+  <button class="btn sub" id="goMgList">ミニゲーム</button>
   <button class="btn sub" id="muteBtnTitle">🔊 サウンドON</button>
   <p class="hint" id="titleInfo"></p>
+</div>
+
+<!-- ミニゲーム一覧 -->
+<div class="screen" id="scrMgList">
+  <h1 style="font-size:clamp(20px,5vw,30px);">ミニゲーム</h1>
+  <p class="hint">対応するメイン武器を購入すると解放され、以降いつでも遊べます。</p>
+  <div id="mgListWrap" style="display:flex;flex-direction:column;gap:10px;width:min(520px,92vw);"></div>
+  <button class="btn sub" id="mgListBack">タイトルへ戻る</button>
 </div>
 
 <!-- バックアップ -->
@@ -650,6 +667,7 @@ const scrTitle=document.getElementById('scrTitle');
 const scrSetup=document.getElementById('scrSetup');
 const scrShop =document.getElementById('scrShop');
 const scrBackup=document.getElementById('scrBackup');
+const scrMgList=document.getElementById('scrMgList');
 const scrMinigame=document.getElementById('scrMinigame');
 const controls=document.getElementById('controls');
 const ovPause =document.getElementById('ovPause');
@@ -1706,6 +1724,7 @@ const MG_UPDATE={1:()=>mgUpdateMemory(),2:()=>mgUpdateMole(),3:()=>mgUpdateFukuw
 const MG_DRAW={1:()=>mgDrawMemory(),2:()=>mgDrawMole(),3:()=>mgDrawFukuwarai(),4:()=>mgDrawStatue(),5:()=>mgDrawRunner()};
 // メイン武器の初回入手で対応するミニゲームが出現する
 const WEAPON_MINIGAME={gatling:2, shotgun:1, rocket:3, beam:4, rail:5};
+const MG_ORDER=['gatling','shotgun','rocket','beam','rail'];
 
 /* ---------- ミニゲームのランキング(端末内保存・各ゲーム上位5件) ---------- */
 function loadMgRankings(){
@@ -1729,6 +1748,34 @@ function renderMgRank(type, newScore){
   box.innerHTML = (isNewBest?'<span style="color:#ffd94a;">🏆自己ベスト更新! </span>':'') +
     'ランキング: ' + list.map((s,i)=>(i+1)+'位 '+s+'点').join(' ／ ');
 }
+
+/* ---------- ミニゲーム一覧(タイトルから常設アクセス) ---------- */
+function renderMgList(){
+  const wrap = document.getElementById('mgListWrap');
+  wrap.innerHTML='';
+  const ranks = loadMgRankings();
+  MG_ORDER.forEach(weaponId=>{
+    const type = WEAPON_MINIGAME[weaponId];
+    const wDef = MAINS.find(m=>m.id===weaponId);
+    const owned = !!(sv.main[weaponId] && sv.main[weaponId].own);
+    const best = (ranks[String(type)]||[])[0];
+    const card=document.createElement('div');
+    card.className='mg-card'+(owned?'':' locked');
+    card.innerHTML =
+      '<div class="mg-name">'+(owned?'':'🔒 ')+MG_NAMES[type]+'</div>'+
+      '<div class="mg-req">解放条件: '+wDef.name+'を購入</div>'+
+      (owned && best!==undefined ? '<div class="mg-best">自己ベスト: '+best+'点</div>' : '');
+    if(owned){
+      const btn=document.createElement('button');
+      btn.className='mg-play-btn'; btn.textContent='プレイ';
+      btn.onclick=()=>{ scrMgList.classList.remove('show'); startMinigame(type,'mglist'); };
+      card.appendChild(btn);
+    }
+    wrap.appendChild(card);
+  });
+}
+document.getElementById('goMgList').onclick=()=>{ scrTitle.classList.remove('show'); scrMgList.classList.add('show'); renderMgList(); };
+document.getElementById('mgListBack').onclick=()=>{ scrMgList.classList.remove('show'); scrTitle.classList.add('show'); };
 
 /* ---------- 武器獲得によるミニゲーム起動(ショップ購入 / エンドレス自動解放) ---------- */
 function triggerWeaponMinigame(weaponId, returnMode){
@@ -1764,7 +1811,7 @@ function mgFinish(bonus, resultText, score){
   bonus=Math.max(0,Math.round(bonus));
   const rankScore = Math.round(score!==undefined ? score : bonus);
   saveMgRankScore(mgType, rankScore);
-  const showBonus = (mgReturnMode==='shop');
+  const showBonus = (mgReturnMode==='shop' || mgReturnMode==='mglist');
   document.getElementById('mgResult').textContent = resultText + (showBonus?'  (+$'+bonus+')':'');
   renderMgRank(mgType, rankScore);
   Snd.sfx.levelup(); vibrate([40,30,40]);
@@ -1772,6 +1819,7 @@ function mgFinish(bonus, resultText, score){
     scrMinigame.classList.remove('show');
     if(mgReturnMode==='title'){ scrTitle.classList.add('show'); refreshTitle(); return; }
     if(mgReturnMode==='shop'){ sv.coins+=bonus; saveGame(); scrShop.classList.add('show'); renderShop(); return; }
+    if(mgReturnMode==='mglist'){ sv.coins+=bonus; saveGame(); refreshTitle(); scrMgList.classList.add('show'); renderMgList(); return; }
     if(mgReturnMode==='endless'){ paused=false; return; }
     paused=false; earned+=bonus; stageClear();
   },2000);
@@ -1783,6 +1831,7 @@ document.getElementById('mgSkip').onclick=()=>{
   scrMinigame.classList.remove('show');
   if(mgReturnMode==='title'){ scrTitle.classList.add('show'); refreshTitle(); return; }
   if(mgReturnMode==='shop'){ scrShop.classList.add('show'); renderShop(); return; }
+  if(mgReturnMode==='mglist'){ scrMgList.classList.add('show'); renderMgList(); return; }
   if(mgReturnMode==='endless'){ paused=false; return; }
   paused=false; stageClear();
 };
