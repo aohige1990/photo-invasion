@@ -188,6 +188,7 @@
     <h2>② コードを読み込む</h2>
     <p class="hint" style="margin:0;">控えておいたコードを貼り付けて復元します。現在の進捗は上書きされます。</p>
     <textarea class="line-input" id="codeIn" rows="4" placeholder="ここにコードを貼り付け"></textarea>
+    <button class="pick-btn" id="pasteCodeBtn" style="background:#3d5270;">クリップボードから貼り付け</button>
     <button class="pick-btn" id="restoreBtn" style="background:#7d5ae0;">このコードで復元する</button>
     <p class="hint" id="restoreMsg" style="min-height:16px;"></p>
   </div>
@@ -820,11 +821,17 @@ function exportSaveCode(){
   return 'PI1-' + btoa(unescape(encodeURIComponent(json)));
 }
 function importSaveCode(code){
-  code = code.trim();
+  // コピー時に混入しがちな改行・空白・全角スペースをすべて除去してから読む
+  code = code.replace(/[\s\u3000]+/g, '');
+  if(!code) throw new Error('コードが空です');
   if(code.startsWith('PI1-')) code = code.slice(4);
-  const json = decodeURIComponent(escape(atob(code)));
-  const obj = JSON.parse(json);
-  if(typeof obj!=='object' || !obj.main || !obj.sub) throw new Error('形式が不正です');
+  let json;
+  try{ json = decodeURIComponent(escape(atob(code))); }
+  catch(e){ throw new Error('コードの一部が欠けているか、余分な文字が混ざっています(base64エラー)'); }
+  let obj;
+  try{ obj = JSON.parse(json); }
+  catch(e){ throw new Error('コードが途中で切れている可能性があります(JSON解析エラー)'); }
+  if(typeof obj!=='object' || !obj.main || !obj.sub) throw new Error('セーブデータの形式が正しくありません');
   return obj;
 }
 document.getElementById('genCodeBtn').onclick=()=>{
@@ -843,6 +850,18 @@ document.getElementById('copyCodeBtn').onclick=async ()=>{
     try{ document.execCommand('copy'); document.getElementById('copyMsg').textContent='コピーしました'; }
     catch(e2){ document.getElementById('copyMsg').textContent='コピーできませんでした。手動で選択してコピーしてください'; }
     ta.setAttribute('readonly','readonly');
+  }
+};
+document.getElementById('pasteCodeBtn').onclick=async ()=>{
+  const msg=document.getElementById('restoreMsg');
+  try{
+    const text = await navigator.clipboard.readText();
+    if(!text){ msg.style.color='#ff9a3a'; msg.textContent='クリップボードが空でした'; return; }
+    document.getElementById('codeIn').value = text;
+    msg.style.color='#8fd2ff'; msg.textContent='貼り付けました。「このコードで復元する」を押してください';
+  }catch(e){
+    msg.style.color='#ff9a3a';
+    msg.textContent='自動貼り付けが使えませんでした。テキスト欄を長押しして貼り付けてください';
   }
 };
 document.getElementById('restoreBtn').onclick=()=>{
@@ -866,7 +885,7 @@ document.getElementById('restoreBtn').onclick=()=>{
     Snd.sfx.levelup();
   }catch(e){
     msg.style.color='#ff4a4a';
-    msg.textContent='コードを読み取れませんでした。コピーミスがないか確認してください';
+    msg.textContent='復元できませんでした: '+e.message;
   }
 };
 document.getElementById('retryBtn').onclick=()=>{ ovOver.classList.remove('show'); startGame(mode, mode==='stage'?stage:1); };
@@ -2055,9 +2074,9 @@ function pickRunnerItem(){
 function runnerPopup(st,text,color){ st.popups.push({text,color,x:140,y:st.groundY+st.py-70,life:40}); }
 
 function mgInitRunner(){
-  document.getElementById('mgInstr').textContent='タップでジャンプ!最初はヘルメットが必ず流れてきます。アイテムで身を守りながら物流倉庫を駆け抜けよう。';
+  document.getElementById('mgInstr').textContent='タップでジャンプ!最初はヘルメットが必ず流れてきます。ぶつかるまで走り続ける距離チャレンジです。';
   mgState={py:0,vy:0,onGround:true,groundY:360,obstacles:[],items:[],spawnT:70,itemT:70,itemsSpawned:0,
-    speed:5,time:32*60,dist:0,itemsGot:0,dead:false,
+    speed:5,dist:0,itemsGot:0,dead:false,
     shieldGround:0,shieldOverhead:0,cartCharges:0,forkliftCharges:0,helmetGotOnce:false,
     flying:false,flyLeft:0,popups:[]};
   mgHandlers.tap=()=>{
@@ -2068,8 +2087,8 @@ function mgInitRunner(){
 function mgUpdateRunner(){
   const st=mgState;
   if(st.dead)return;
-  st.time--; st.dist++;
-  st.speed=5+Math.min(4,st.dist/900);
+  st.dist++;
+  st.speed=5+Math.min(6,st.dist/850);
 
   if(st.flying){
     st.flyLeft--;
@@ -2085,16 +2104,16 @@ function mgUpdateRunner(){
     // ヘルメットを一度でも入手するまでは「上からの落下物」は出現しない(理不尽な即死を防止)
     const canOverhead = st.helmetGotOnce;
     let type;
-    if(!canOverhead) type = r<0.4?'box' : r<0.75?'pallet' : 'cart';
-    else type = r<0.32?'box' : r<0.6?'pallet' : r<0.8?'cart' : 'overhead';
+    if(!canOverhead) type = r<0.55?'box':'pallet';
+    else type = r<0.45?'box' : r<0.8?'pallet' : 'overhead';
     if(type==='overhead'){
       st.obstacles.push({x:W+30,w:70,h:38,type,oy:190});
     } else {
-      const h = type==='cart' ? 46+Math.random()*10 : 30+Math.random()*28;
-      const w = type==='cart' ? 54 : 34+Math.random()*26;
+      const h = 30+Math.random()*28;
+      const w = 34+Math.random()*26;
       st.obstacles.push({x:W+30,w,h,type});
     }
-    st.spawnT=Math.max(28,55+Math.floor(Math.random()*35)-Math.floor(st.dist/300));
+    st.spawnT=Math.max(26,52+Math.floor(Math.random()*32)-Math.floor(st.dist/280));
   }
   st.itemT--;
   if(st.itemT<=0){
@@ -2102,7 +2121,7 @@ function mgUpdateRunner(){
     const def = st.itemsSpawned===0 ? RUNNER_ITEMS.find(i=>i.type==='helmet') : pickRunnerItem();
     st.itemsSpawned++;
     st.items.push({x:W+30,y:-90-Math.random()*40,def});
-    st.itemT = def.type==='handy' ? 520 : (150+Math.floor(Math.random()*100));
+    st.itemT = def.type==='handy' ? 520 : (140+Math.floor(Math.random()*90));
   }
 
   const px=140;
@@ -2128,8 +2147,6 @@ function mgUpdateRunner(){
       } else if(o.type==='pallet'){
         if(st.forkliftCharges>0){ st.forkliftCharges--; blocked=true; runnerPopup(st,'フォークリフトで処理!','#ff8a3a'); }
         else if(st.shieldGround>0){ st.shieldGround--; blocked=true; runnerPopup(st,'安全靴が守った!','#4fd1c5'); }
-      } else if(o.type==='cart'){
-        if(st.shieldGround>0){ st.shieldGround--; blocked=true; runnerPopup(st,'安全靴が守った!','#4fd1c5'); }
       }
       if(blocked){ st.obstacles.splice(i,1); Snd.sfx.weaponSwitch(); vibrate(15); continue; }
 
@@ -2144,10 +2161,10 @@ function mgUpdateRunner(){
     if(!it.got && Math.abs(it.x-px)<32 && Math.abs(it.y-(st.py-40))<34){
       it.got=true; st.itemsGot++;
       const d=it.def;
-      if(d.type==='shoes'){ st.shieldGround=1; runnerPopup(st,'安全靴ゲット!','#4fd1c5'); }
-      else if(d.type==='helmet'){ st.shieldOverhead=1; st.helmetGotOnce=true; runnerPopup(st,'ヘルメットゲット!','#ffd94a'); }
-      else if(d.type==='cart'){ st.cartCharges=Math.min(3,st.cartCharges+3); runnerPopup(st,'台車ゲット!段ボール3つ防御','#e0a458'); }
-      else if(d.type==='forklift'){ st.forkliftCharges=Math.min(3,st.forkliftCharges+3); runnerPopup(st,'フォークリフトゲット!パレット3つ防御','#ff8a3a'); }
+      if(d.type==='shoes'){ st.shieldGround=Math.min(3,st.shieldGround+1); runnerPopup(st,'安全靴ゲット!(ストック'+st.shieldGround+')','#4fd1c5'); }
+      else if(d.type==='helmet'){ st.shieldOverhead=Math.min(3,st.shieldOverhead+1); st.helmetGotOnce=true; runnerPopup(st,'ヘルメットゲット!(ストック'+st.shieldOverhead+')','#ffd94a'); }
+      else if(d.type==='cart'){ st.cartCharges=Math.min(9,st.cartCharges+3); runnerPopup(st,'台車ゲット!段ボール3つ防御','#e0a458'); }
+      else if(d.type==='forklift'){ st.forkliftCharges=Math.min(9,st.forkliftCharges+3); runnerPopup(st,'フォークリフトゲット!パレット3つ防御','#ff8a3a'); }
       else if(d.type==='handy'){ st.flying=true; st.flyLeft=600; st.py=0; st.vy=0; st.onGround=true; runnerPopup(st,'ハンディ端末!100m飛行!','#c77dff'); }
       Snd.sfx.levelup(); vibrate(20);
     }
@@ -2155,16 +2172,7 @@ function mgUpdateRunner(){
   st.items=st.items.filter(it=>!it.got);
   st.popups=st.popups.filter(p=>{ p.y-=0.6; return --p.life>0; });
 
-  const shieldTxt=[
-    st.shieldGround>0?'🛡靴':'', st.shieldOverhead>0?'🛡帽':'',
-    st.cartCharges>0?'台車x'+st.cartCharges:'', st.forkliftCharges>0?'リフトx'+st.forkliftCharges:'',
-    st.flying?'飛行中':''
-  ].filter(Boolean).join(' ');
-  document.getElementById('mgStatus').textContent='距離 '+Math.round(st.dist/6)+'m ・ 残り '+Math.max(0,Math.ceil(st.time/60))+'秒'+(shieldTxt?' ・ '+shieldTxt:'');
-  if(st.time<=0&&mgRunning){
-    st.dead=true;
-    mgFinish(Math.max(60,Math.round(st.dist/12)+st.itemsGot*20+80), 'ゴール!距離 '+Math.round(st.dist/6)+'m', Math.round(st.dist/6));
-  }
+  document.getElementById('mgStatus').textContent='距離 '+Math.round(st.dist/6)+'m ・ ランキングは距離で記録されます';
 }
 function drawBoxIcon(g,cx,bottom,w,h){
   const x=cx-w/2, y=bottom-h;
@@ -2278,6 +2286,27 @@ function mgDrawRunner(){
     mctx.fillText(p.text, p.x, p.y);
     mctx.globalAlpha=1;
   }
+  // 左端: 所持アイテムのストック表示
+  let stockY=54; const stockX=34;
+  const drawStock=(type,count)=>{
+    mctx.fillStyle='rgba(15,24,38,.78)';
+    mctx.beginPath(); mctx.arc(stockX,stockY,22,0,Math.PI*2); mctx.fill();
+    mctx.strokeStyle='rgba(255,255,255,.5)'; mctx.lineWidth=1.5; mctx.stroke();
+    drawItemIcon(mctx,type,stockX,stockY,16);
+    if(count>1){
+      mctx.fillStyle='#ffd94a';
+      mctx.beginPath(); mctx.arc(stockX+15,stockY+15,10,0,Math.PI*2); mctx.fill();
+      mctx.fillStyle='#1c2a3d'; mctx.font='bold 12px sans-serif'; mctx.textAlign='center'; mctx.textBaseline='middle';
+      mctx.fillText(String(count), stockX+15, stockY+15);
+      mctx.textBaseline='alphabetic';
+    }
+    stockY+=54;
+  };
+  if(st.shieldGround>0) drawStock('shoes', st.shieldGround);
+  if(st.shieldOverhead>0) drawStock('helmet', st.shieldOverhead);
+  if(st.cartCharges>0) drawStock('cart', st.cartCharges);
+  if(st.forkliftCharges>0) drawStock('forklift', st.forkliftCharges);
+  if(st.flying) drawStock('handy', Math.max(1,Math.ceil(st.flyLeft/6)));
 }
 
 /* ================= 背景 ================= */
