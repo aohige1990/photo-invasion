@@ -214,16 +214,40 @@
       <button class="reset-btn" data-reset="hero">初期キャラに戻す</button>
     </div>
     <div class="card">
-      <h2>敵エイリアン</h2>
-      <canvas id="prevEnemy" width="150" height="170"></canvas>
+      <h2>敵エイリアン①</h2>
+      <canvas id="prevEnemy1" width="150" height="170"></canvas>
       <div class="mode-row">
-        <button class="mode-btn on" data-who="enemy" data-mode="face">顔はめ込み</button>
-        <button class="mode-btn" data-who="enemy" data-mode="body">全身画像</button>
+        <button class="mode-btn on" data-who="enemy1" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="enemy1" data-mode="body">全身画像</button>
       </div>
       <label class="pick-btn">画像フォルダから選ぶ
-        <input type="file" id="fileEnemy" accept="image/*">
+        <input type="file" id="fileEnemy1" accept="image/*">
       </label>
-      <button class="reset-btn" data-reset="enemy">初期キャラに戻す</button>
+      <button class="reset-btn" data-reset="enemy1">初期キャラに戻す</button>
+    </div>
+    <div class="card">
+      <h2>敵エイリアン②</h2>
+      <canvas id="prevEnemy2" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="enemy2" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="enemy2" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileEnemy2" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="enemy2">未設定に戻す</button>
+    </div>
+    <div class="card">
+      <h2>敵エイリアン③</h2>
+      <canvas id="prevEnemy3" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="enemy3" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="enemy3" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileEnemy3" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="enemy3">未設定に戻す</button>
     </div>
     <div class="card">
       <h2>ボス</h2>
@@ -240,8 +264,8 @@
   </div>
   <div class="setup-grid" style="max-width:640px;">
     <div class="card" style="width:100%;">
-      <h2>ミニゲーム用キャラ(神経衰弱・もぐら叩きなどで使用)</h2>
-      <p class="hint" style="margin:0;">未設定の枠は色付きのプレースホルダーで自動的に補われます。</p>
+      <h2>ミニゲーム用キャラ①〜⑥(神経衰弱は最大6人分の写真をここから使用)</h2>
+      <p class="hint" style="margin:0;">未設定の枠は色付きのプレースホルダーで自動的に補われます。6枠すべて設定すると、神経衰弱などのミニゲームは全員実写真になります。</p>
     </div>
   </div>
   <div class="setup-grid">
@@ -280,6 +304,42 @@
         <input type="file" id="fileMgExtra3" accept="image/*">
       </label>
       <button class="reset-btn" data-reset="mgExtra3">未設定に戻す</button>
+    </div>
+    <div class="card">
+      <h2>ミニゲームキャラ④</h2>
+      <canvas id="prevMgExtra4" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="mgExtra4" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="mgExtra4" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileMgExtra4" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="mgExtra4">未設定に戻す</button>
+    </div>
+    <div class="card">
+      <h2>ミニゲームキャラ⑤</h2>
+      <canvas id="prevMgExtra5" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="mgExtra5" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="mgExtra5" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileMgExtra5" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="mgExtra5">未設定に戻す</button>
+    </div>
+    <div class="card">
+      <h2>ミニゲームキャラ⑥</h2>
+      <canvas id="prevMgExtra6" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="mgExtra6" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="mgExtra6" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileMgExtra6" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="mgExtra6">未設定に戻す</button>
     </div>
   </div>
   <div class="setup-grid" style="max-width:640px;">
@@ -579,16 +639,26 @@ loadGame();
 /* ================= キャラ画像 ================= */
 const charCfg = {
   hero:  { mode:'face', faceImg:null, bodyImg:null },
-  enemy: { mode:'face', faceImg:null, bodyImg:null },
+  enemy1: { mode:'face', faceImg:null, bodyImg:null },
+  enemy2: { mode:'face', faceImg:null, bodyImg:null },
+  enemy3: { mode:'face', faceImg:null, bodyImg:null },
   boss:  { mode:'face', faceImg:null, bodyImg:null },
   mgExtra1: { mode:'face', faceImg:null, bodyImg:null },
   mgExtra2: { mode:'face', faceImg:null, bodyImg:null },
-  mgExtra3: { mode:'face', faceImg:null, bodyImg:null }
+  mgExtra3: { mode:'face', faceImg:null, bodyImg:null },
+  mgExtra4: { mode:'face', faceImg:null, bodyImg:null },
+  mgExtra5: { mode:'face', faceImg:null, bodyImg:null },
+  mgExtra6: { mode:'face', faceImg:null, bodyImg:null }
 };
-// ボス専用画像が未設定なら敵と同じ画像を使う
+// 敵は3種類のうちランダムに割り当てられた見た目(e.enemySkin)を使う。
+// ボス専用画像が未設定なら敵①の画像を使う。
 function enemyCfg(e){
-  if(e.boss && (charCfg.boss.faceImg || charCfg.boss.bodyImg)) return charCfg.boss;
-  return charCfg.enemy;
+  if(e.boss){
+    if(charCfg.boss.faceImg || charCfg.boss.bodyImg) return charCfg.boss;
+    return charCfg.enemy1;
+  }
+  const key = 'enemy'+(e.enemySkin||1);
+  return charCfg[key];
 }
 function makeFaceCanvas(img){
   const size = 128, c = document.createElement('canvas');
@@ -697,14 +767,22 @@ function drawEnemy(g, footX, footY, dir, walk, cfg, flash, scale){
 
 /* ================= プレビュー ================= */
 const prevHero  = document.getElementById('prevHero').getContext('2d');
-const prevEnemy = document.getElementById('prevEnemy').getContext('2d');
+const prevEnemy1 = document.getElementById('prevEnemy1').getContext('2d');
+const prevEnemy2 = document.getElementById('prevEnemy2').getContext('2d');
+const prevEnemy3 = document.getElementById('prevEnemy3').getContext('2d');
 const prevBoss  = document.getElementById('prevBoss').getContext('2d');
 const prevMgExtra1 = document.getElementById('prevMgExtra1').getContext('2d');
 const prevMgExtra2 = document.getElementById('prevMgExtra2').getContext('2d');
 const prevMgExtra3 = document.getElementById('prevMgExtra3').getContext('2d');
+const prevMgExtra4 = document.getElementById('prevMgExtra4').getContext('2d');
+const prevMgExtra5 = document.getElementById('prevMgExtra5').getContext('2d');
+const prevMgExtra6 = document.getElementById('prevMgExtra6').getContext('2d');
 function drawPreviews(){
-  [[prevHero,'hero',drawHero],[prevEnemy,'enemy',drawEnemy],[prevBoss,'boss',drawEnemy],
-   [prevMgExtra1,'mgExtra1',drawEnemy],[prevMgExtra2,'mgExtra2',drawEnemy],[prevMgExtra3,'mgExtra3',drawEnemy]
+  [[prevHero,'hero',drawHero],
+   [prevEnemy1,'enemy1',drawEnemy],[prevEnemy2,'enemy2',drawEnemy],[prevEnemy3,'enemy3',drawEnemy],
+   [prevBoss,'boss',drawEnemy],
+   [prevMgExtra1,'mgExtra1',drawEnemy],[prevMgExtra2,'mgExtra2',drawEnemy],[prevMgExtra3,'mgExtra3',drawEnemy],
+   [prevMgExtra4,'mgExtra4',drawEnemy],[prevMgExtra5,'mgExtra5',drawEnemy],[prevMgExtra6,'mgExtra6',drawEnemy]
   ].forEach(([g,who,fn])=>{
     g.clearRect(0,0,150,170);
     g.fillStyle='#2c3e57'; g.fillRect(0,0,150,170);
@@ -961,11 +1039,16 @@ document.getElementById('showUiTab').onclick=()=>{
 function toTitle(){ controls.classList.remove('show'); running=false; scrTitle.classList.add('show'); refreshTitle(); stopMusic(); }
 
 document.getElementById('fileHero').onchange =e=>{ if(e.target.files[0]) loadPhoto('hero', e.target.files[0]); e.target.value=''; };
-document.getElementById('fileEnemy').onchange=e=>{ if(e.target.files[0]) loadPhoto('enemy',e.target.files[0]); e.target.value=''; };
+document.getElementById('fileEnemy1').onchange=e=>{ if(e.target.files[0]) loadPhoto('enemy1',e.target.files[0]); e.target.value=''; };
+document.getElementById('fileEnemy2').onchange=e=>{ if(e.target.files[0]) loadPhoto('enemy2',e.target.files[0]); e.target.value=''; };
+document.getElementById('fileEnemy3').onchange=e=>{ if(e.target.files[0]) loadPhoto('enemy3',e.target.files[0]); e.target.value=''; };
 document.getElementById('fileBoss').onchange =e=>{ if(e.target.files[0]) loadPhoto('boss', e.target.files[0]); e.target.value=''; };
 document.getElementById('fileMgExtra1').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra1', e.target.files[0]); e.target.value=''; };
 document.getElementById('fileMgExtra2').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra2', e.target.files[0]); e.target.value=''; };
 document.getElementById('fileMgExtra3').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra3', e.target.files[0]); e.target.value=''; };
+document.getElementById('fileMgExtra4').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra4', e.target.files[0]); e.target.value=''; };
+document.getElementById('fileMgExtra5').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra5', e.target.files[0]); e.target.value=''; };
+document.getElementById('fileMgExtra6').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra6', e.target.files[0]); e.target.value=''; };
 document.querySelectorAll('.mode-btn').forEach(b=>{
   b.onclick=()=>{
     charCfg[b.dataset.who].mode=b.dataset.mode;
@@ -1207,7 +1290,8 @@ function spawnEnemy(boss){
     x: side<0?-50:W+50, y:GROUND, dir:side<0?1:-1,
     hp, maxHp:hp, spd, scale, touch, kind,
     walk:Math.random()*6, flash:0, knock:0, boss:!!boss,
-    state:'walk', t:0, vy:0, midSaid:new Set()
+    state:'walk', t:0, vy:0, midSaid:new Set(),
+    enemySkin: 1+Math.floor(Math.random()*3)
   };
   if(kind==='burrower'){
     // 地面から這い出る。プレイヤーから一定距離を空けて出現
@@ -1714,19 +1798,24 @@ miniCv.width = W; miniCv.height = H;
 function facePool(){
   const list=[];
   const addPerson=(cfg,label,color)=>{
+    if(list.length>=6 || !cfg) return;
     if(cfg.mode==='body' && cfg.bodyImg) list.push({img:cfg.bodyImg, isBody:true, label, color});
     else if(cfg.faceImg) list.push({img:cfg.faceImg, isBody:false, label, color});
   };
+  // ① ミニゲーム専用キャラ6枠を最優先(神経衰弱などで実写真6人分を使えるように)
+  const mgColors=['#e0a458','#5bc8af','#e06b9a','#8bd450','#f2c14e','#6ba3e0'];
+  for(let i=1;i<=6;i++) addPerson(charCfg['mgExtra'+i], 'キャラ'+i, mgColors[i-1]);
+  // ② 不足分は主人公・ボス・敵①〜③で補う
   addPerson(charCfg.hero, '主人公', '#7da7d9');
   if(charCfg.boss.faceImg || charCfg.boss.bodyImg) addPerson(charCfg.boss, 'ボス', '#ff5a4a');
-  else addPerson(charCfg.enemy, 'ボス', '#ff5a4a');
-  addPerson(charCfg.enemy, '敵', '#a06bc9');
-  addPerson(charCfg.mgExtra1, 'キャラ①', '#e0a458');
-  addPerson(charCfg.mgExtra2, 'キャラ②', '#5bc8af');
-  addPerson(charCfg.mgExtra3, 'キャラ③', '#e06b9a');
-  const extra=['#8bd450','#f2c14e','#6ba3e0','#c77dff','#4fd1c5','#e0a458'];
+  else addPerson(charCfg.enemy1, 'ボス', '#ff5a4a');
+  addPerson(charCfg.enemy1, '敵①', '#a06bc9');
+  addPerson(charCfg.enemy2, '敵②', '#c98be0');
+  addPerson(charCfg.enemy3, '敵③', '#8bc9e0');
+  // ③ それでも足りなければプレースホルダー
+  const fallback=['#8bd450','#f2c14e','#6ba3e0','#c77dff','#4fd1c5','#e0a458'];
   let i=0;
-  while(list.length<6){ list.push({img:null,label:String.fromCharCode(65+i),color:extra[i%extra.length]}); i++; }
+  while(list.length<6){ list.push({img:null,label:String.fromCharCode(65+i),color:fallback[i%fallback.length]}); i++; }
   return list;
 }
 function drawFaceCircle(g,person,x,y,r){
@@ -2044,6 +2133,26 @@ function drawPart(g,type,x,y){
   }
   g.restore();
 }
+// 福笑いで使う顔写真を決定(主人公優先。なければプール内の顔画像)
+function fukuwaraiSourceImg(){
+  if(charCfg.hero.mode!=='body' && charCfg.hero.faceImg) return charCfg.hero.faceImg;
+  const p = mgPool.find(x=>x.img && !x.isBody);
+  return p ? p.img : null;
+}
+// 顔写真の一部を帯状に切り出してパーツとして描画(実際の顔ハメ写真を使用)
+const FUKUWARAI_BANDS = { eyebrows:[0.26,0.40], eyes:[0.38,0.54], nose:[0.48,0.68], mouth:[0.62,0.80] };
+function drawPhotoPart(g,srcImg,type,x,y){
+  if(!srcImg){ drawPart(g,type,x,y); return; }
+  const [t0,t1]=FUKUWARAI_BANDS[type];
+  const iw=srcImg.width, ih=srcImg.height;
+  const sy=ih*t0, sh=ih*(t1-t0);
+  const w=94, h=Math.max(18, w*(sh/iw));
+  g.save();
+  g.beginPath(); g.rect(x-w/2,y-h/2,w,h); g.clip();
+  g.drawImage(srcImg,0,sy,iw,sh,x-w/2,y-h/2,w,h);
+  g.restore();
+  g.strokeStyle='rgba(0,0,0,.35)'; g.lineWidth=2; g.strokeRect(x-w/2,y-h/2,w,h);
+}
 function mgInitFukuwarai(){
   document.getElementById('mgInstr').textContent='パーツをドラッグして正しい位置に顔を完成させよう(完成後に採点)。';
   const cx=W/2, cy=210;
@@ -2055,7 +2164,7 @@ function mgInitFukuwarai(){
     {type:'nose',    x:500,y:trayY,placed:false},
     {type:'mouth',   x:660,y:trayY,placed:false},
   ];
-  mgState={cx,cy,targets,parts,dragging:null,time:40*60,done:false};
+  mgState={cx,cy,targets,parts,dragging:null,time:40*60,done:false,srcImg:fukuwaraiSourceImg()};
   mgHandlers.tap=(p)=>{
     if(mgState.done)return;
     let best=null,bd=1e9;
@@ -2091,13 +2200,14 @@ function mgDrawFukuwarai(){
   mctx.beginPath(); mctx.ellipse(mgState.cx,mgState.cy,120,145,0,0,Math.PI*2); mctx.fill();
   mctx.strokeStyle='#c9a876'; mctx.lineWidth=3; mctx.stroke();
   mctx.fillStyle='rgba(255,255,255,.06)'; mctx.fillRect(40,355,W-80,70);
-  for(const pt of mgState.parts) drawPart(mctx,pt.type,pt.x,pt.y);
+  for(const pt of mgState.parts) drawPhotoPart(mctx,mgState.srcImg,pt.type,pt.x,pt.y);
 }
 
 /* ---------- ④ 顔ハメだるまさんがころんだ ---------- */
 function mgInitStatue(){
   document.getElementById('mgInstr').textContent='「進む」ボタンで前進。振り向いた瞬間にタップすると失敗!';
-  mgState={watching:false,switchT:90+Math.floor(Math.random()*60),progress:0,time:32*60,lastTapT:0,fail:false,turnFlash:0};
+  mgState={watching:false,switchT:90+Math.floor(Math.random()*60),progress:0,time:32*60,lastTapT:0,fail:false,turnFlash:0,
+    turning:false,turnFrames:0,turnTotal:18,turnTarget:false};
   mgHandlers.tap=(p)=>{
     const bx=W/2,by=H-70,br=55;
     if(Math.hypot(p.x-bx,p.y-by)>br)return;
@@ -2123,10 +2233,17 @@ function mgUpdateStatue(){
   if(st.fail||st.progress>=100)return;
   st.time--; st.switchT--;
   if(st.turnFlash>0)st.turnFlash--;
-  if(st.switchT<=0){
-    st.watching=!st.watching; st.turnFlash=12;
-    st.switchT = st.watching ? (55+Math.floor(Math.random()*45)) : (75+Math.floor(Math.random()*90));
-    if(st.watching) Snd.sfx.bossHit();
+  if(st.turning){
+    st.turnFrames--;
+    // 回転の中間地点で実際の向きを切り替える(振り返りの瞬間)
+    if(st.turnFrames===Math.floor(st.turnTotal/2)){
+      st.watching=st.turnTarget;
+      if(st.watching){ Snd.sfx.bossHit(); vibrate(25); st.turnFlash=12; }
+    }
+    if(st.turnFrames<=0) st.turning=false;
+  } else if(st.switchT<=0){
+    st.turning=true; st.turnFrames=st.turnTotal; st.turnTarget=!st.watching;
+    st.switchT = !st.watching ? (55+Math.floor(Math.random()*45)) : (75+Math.floor(Math.random()*90));
   }
   document.getElementById('mgStatus').textContent='進行度 '+st.progress+'% ・ 残り '+Math.max(0,Math.ceil(st.time/60))+'秒';
   if(st.time<=0&&mgRunning) mgFinish(Math.max(20,Math.round(st.progress*1.5)),'時間切れ(進行度'+st.progress+'%)', st.progress);
@@ -2136,12 +2253,25 @@ function mgDrawStatue(){
   mctx.fillStyle='#1c2a3d'; mctx.fillRect(0,0,W,H);
   const person=mgPool.find(p=>p.label==='ボス')||mgPool[0];
   const cx=W/2,cy=170;
-  mctx.save(); if(!st.watching) mctx.globalAlpha=0.4;
+  // 回転演出: 横方向にスケールさせて振り返りを表現
+  let scaleX=1;
+  if(st.turning){
+    const progress=1-(st.turnFrames/st.turnTotal);
+    scaleX=Math.cos(progress*Math.PI);
+  }
+  mctx.save();
+  mctx.translate(cx,cy);
+  mctx.scale(Math.max(0.06,Math.abs(scaleX)),1);
+  mctx.translate(-cx,-cy);
+  if(!st.watching) mctx.globalAlpha=0.4;
   drawFaceCircle(mctx,person,cx,cy,100);
   mctx.restore();
-  if(st.watching){ mctx.strokeStyle='#ff4a4a'; mctx.lineWidth=6; mctx.beginPath(); mctx.arc(cx,cy,108,0,Math.PI*2); mctx.stroke(); }
-  mctx.fillStyle=st.watching?'#ff4a4a':'#5be36b'; mctx.font='bold 24px sans-serif'; mctx.textAlign='center';
-  mctx.fillText(st.watching?'こっちを見た!':'進んでOK', cx, 305);
+  if(st.watching && !st.turning){
+    mctx.strokeStyle='#ff4a4a'; mctx.lineWidth=6; mctx.beginPath(); mctx.arc(cx,cy,108,0,Math.PI*2); mctx.stroke();
+  }
+  mctx.fillStyle=st.watching?'#ff4a4a':(st.turning?'#ffd94a':'#5be36b');
+  mctx.font='bold 24px sans-serif'; mctx.textAlign='center';
+  mctx.fillText(st.turning?'振り向き中…':(st.watching?'こっちを見た!':'進んでOK'), cx, 305);
   mctx.fillStyle='rgba(255,255,255,.15)'; mctx.fillRect(150,330,500,26);
   mctx.fillStyle='#5be36b'; mctx.fillRect(150,330,500*st.progress/100,26);
   mctx.strokeStyle='#fff'; mctx.strokeRect(150,330,500,26);
@@ -2652,7 +2782,7 @@ function drawBossSpeech(){
   ctx.strokeStyle='#ff5a4a'; ctx.lineWidth=2;
   roundRect(ctx,bx,by,bw,bh,14); ctx.stroke();
   // アバター(ボス専用画像があればそれを使用)
-  const bc = (charCfg.boss.faceImg||charCfg.boss.bodyImg) ? charCfg.boss : charCfg.enemy;
+  const bc = (charCfg.boss.faceImg||charCfg.boss.bodyImg) ? charCfg.boss : charCfg.enemy1;
   ctx.save();
   ctx.beginPath(); ctx.arc(bx+34, by+bh/2, 21, 0, Math.PI*2); ctx.clip();
   if(bc.faceImg){ ctx.drawImage(bc.faceImg, bx+13, by+bh/2-21, 42,42); }
