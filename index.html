@@ -254,6 +254,18 @@
   <button class="btn" id="shopBack">戻る</button>
 </div>
 
+<!-- ボス撃破後のミニゲーム -->
+<div class="screen" id="scrMinigame" style="z-index:50;justify-content:flex-start;padding-top:3vh;gap:8px;">
+  <h1 id="mgTitle" style="font-size:clamp(18px,5vw,26px);margin-bottom:0;">ミニゲーム</h1>
+  <p class="hint" id="mgInstr" style="margin:0;max-width:640px;">説明</p>
+  <div id="mgStatus" style="color:#ffd94a;font-weight:bold;font-size:15px;min-height:20px;"></div>
+  <div id="mgWrap" style="position:relative;width:min(800px,96vw);aspect-ratio:800/450;">
+    <canvas id="miniCanvas" style="width:100%;height:100%;background:#1c2a3d;border-radius:14px;display:block;touch-action:none;"></canvas>
+  </div>
+  <div id="mgResult" class="hint" style="min-height:20px;color:#5be36b;font-weight:bold;"></div>
+  <button class="btn sub" id="mgSkip">スキップ(ボーナスなし)</button>
+</div>
+
 <!-- 操作 -->
 <div id="controls">
   <div class="pad" id="btnL">◀</div>
@@ -636,6 +648,7 @@ const scrTitle=document.getElementById('scrTitle');
 const scrSetup=document.getElementById('scrSetup');
 const scrShop =document.getElementById('scrShop');
 const scrBackup=document.getElementById('scrBackup');
+const scrMinigame=document.getElementById('scrMinigame');
 const controls=document.getElementById('controls');
 const ovPause =document.getElementById('ovPause');
 const ovOver  =document.getElementById('ovOver');
@@ -1549,7 +1562,7 @@ function update(){
   swings=swings.filter(s=>--s.life>0);
   bloodPools=bloodPools.filter(p=>--p.life>0);
   if(bossSpeech){ bossSpeech.life--; if(bossSpeech.life<=0) bossSpeech=null; }
-  if(bossDefeatDelay>0){ bossDefeatDelay--; if(bossDefeatDelay===0) stageClear(); }
+  if(bossDefeatDelay>0){ bossDefeatDelay--; if(bossDefeatDelay===0) startBossMinigame(); }
   if(shake>0)shake--;
 }
 
@@ -1586,6 +1599,487 @@ function stageClear(){
   document.getElementById('clearStat').innerHTML =
     'STAGE '+stage+' クリア!<br>撃破数 <b>'+kills+'</b><br>獲得コイン <b>$'+_lastEarned+'</b><br>所持コイン <b>$'+sv.coins+'</b>';
   ovClear.classList.add('show');
+}
+
+/* =========================================================
+   ボス撃破後のミニゲーム(6種類)
+   顔ハメ写真(hero/enemy/boss)を活用し、足りない分はプレース
+   ホルダー(色付き円+ラベル)で補って必ず遊べるようにする。
+   ========================================================= */
+const miniCv = document.getElementById('miniCanvas');
+const mctx = miniCv.getContext('2d');
+miniCv.width = W; miniCv.height = H;
+
+function facePool(){
+  const list=[];
+  if(charCfg.hero.faceImg)  list.push({img:charCfg.hero.faceImg,  label:'主人公', color:'#7da7d9'});
+  if(charCfg.boss.faceImg)  list.push({img:charCfg.boss.faceImg,  label:'ボス',   color:'#ff5a4a'});
+  else if(charCfg.enemy.faceImg) list.push({img:charCfg.enemy.faceImg, label:'ボス', color:'#ff5a4a'});
+  if(charCfg.enemy.faceImg) list.push({img:charCfg.enemy.faceImg, label:'敵',     color:'#a06bc9'});
+  const extra=['#e0a458','#5bc8af','#e06b9a','#8bd450','#f2c14e','#6ba3e0','#c77dff','#4fd1c5'];
+  let i=0;
+  while(list.length<6){ list.push({img:null,label:String.fromCharCode(65+i),color:extra[i%extra.length]}); i++; }
+  return list;
+}
+function drawFaceCircle(g,person,x,y,r){
+  g.save();
+  g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.closePath(); g.clip();
+  if(person.img){ g.drawImage(person.img, x-r, y-r, r*2, r*2); }
+  else{
+    g.fillStyle=person.color||'#7da7d9'; g.fillRect(x-r,y-r,r*2,r*2);
+    g.fillStyle='rgba(255,255,255,.92)'; g.font='bold '+Math.round(r*1.05)+'px sans-serif';
+    g.textAlign='center'; g.textBaseline='middle';
+    g.fillText(person.label||'?', x, y+2);
+  }
+  g.restore();
+  g.beginPath(); g.arc(x,y,r,0,Math.PI*2);
+  g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.45)'; g.stroke();
+}
+function mgRoundRect(g,x,y,w,h,r){
+  if(g.roundRect){ g.beginPath(); g.roundRect(x,y,w,h,r); return; }
+  g.beginPath();
+  g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+
+const mgHandlers={tap:null,move:null,release:null};
+let mgMouseDown=false;
+function miniPos(evt){
+  const rect=miniCv.getBoundingClientRect();
+  const t=evt.touches&&evt.touches[0];
+  const cx=t?t.clientX:evt.clientX, cy=t?t.clientY:evt.clientY;
+  return {x:(cx-rect.left)/rect.width*W, y:(cy-rect.top)/rect.height*H};
+}
+miniCv.addEventListener('touchstart',e=>{e.preventDefault(); if(mgHandlers.tap)mgHandlers.tap(miniPos(e));},{passive:false});
+miniCv.addEventListener('touchmove', e=>{e.preventDefault(); if(mgHandlers.move)mgHandlers.move(miniPos(e));},{passive:false});
+miniCv.addEventListener('touchend',  e=>{e.preventDefault(); if(mgHandlers.release)mgHandlers.release();},{passive:false});
+miniCv.addEventListener('mousedown',e=>{mgMouseDown=true; if(mgHandlers.tap)mgHandlers.tap(miniPos(e));});
+miniCv.addEventListener('mousemove',e=>{if(mgMouseDown&&mgHandlers.move)mgHandlers.move(miniPos(e));});
+miniCv.addEventListener('mouseup',  e=>{mgMouseDown=false; if(mgHandlers.release)mgHandlers.release();});
+miniCv.addEventListener('mouseleave',e=>{if(mgMouseDown){mgMouseDown=false; if(mgHandlers.release)mgHandlers.release();}});
+
+let mgType=1, mgRunning=false, mgState=null, mgPool=[], mgBossCount=0;
+const MG_NAMES={1:'顔ハメ神経衰弱',2:'顔ハメもぐら叩き',3:'顔ハメ福笑い',4:'顔ハメ落ち物ゲーム',5:'顔ハメだるまさんがころんだ',6:'顔ハメ横スクロール'};
+const MG_INIT={1:()=>mgInitMemory(),2:()=>mgInitMole(),3:()=>mgInitFukuwarai(),4:()=>mgInitDrop(),5:()=>mgInitStatue(),6:()=>mgInitRunner()};
+const MG_UPDATE={1:()=>mgUpdateMemory(),2:()=>mgUpdateMole(),3:()=>mgUpdateFukuwarai(),4:()=>mgUpdateDrop(),5:()=>mgUpdateStatue(),6:()=>mgUpdateRunner()};
+const MG_DRAW={1:()=>mgDrawMemory(),2:()=>mgDrawMole(),3:()=>mgDrawFukuwarai(),4:()=>mgDrawDrop(),5:()=>mgDrawStatue(),6:()=>mgDrawRunner()};
+
+function startBossMinigame(){
+  mgBossCount++;
+  mgType = ((mgBossCount-1)%6)+1;
+  mgPool = facePool();
+  paused = true;
+  scrMinigame.classList.add('show');
+  document.getElementById('mgResult').textContent='';
+  document.getElementById('mgTitle').textContent = MG_NAMES[mgType];
+  mgRunning=true;
+  MG_INIT[mgType]();
+  requestAnimationFrame(mgLoop);
+}
+function mgLoop(){
+  if(!mgRunning) return;
+  MG_UPDATE[mgType]();
+  MG_DRAW[mgType]();
+  if(mgRunning) requestAnimationFrame(mgLoop);
+}
+function mgFinish(bonus, resultText){
+  if(!mgRunning) return;
+  mgRunning=false;
+  mgHandlers.tap=null; mgHandlers.move=null; mgHandlers.release=null;
+  bonus=Math.max(0,Math.round(bonus));
+  document.getElementById('mgResult').textContent = resultText+'  (+$'+bonus+')';
+  Snd.sfx.levelup(); vibrate([40,30,40]);
+  setTimeout(()=>{
+    scrMinigame.classList.remove('show');
+    paused=false;
+    earned += bonus;
+    stageClear();
+  },1400);
+}
+document.getElementById('mgSkip').onclick=()=>{
+  if(!mgRunning) return;
+  mgRunning=false;
+  mgHandlers.tap=null; mgHandlers.move=null; mgHandlers.release=null;
+  scrMinigame.classList.remove('show');
+  paused=false;
+  stageClear();
+};
+
+/* ---------- ① 顔ハメ神経衰弱 ---------- */
+function mgInitMemory(){
+  document.getElementById('mgInstr').textContent='同じ人物のペアを見つけよう。カードをタップしてめくります。';
+  const pairs=[]; for(let i=0;i<6;i++){pairs.push(i);pairs.push(i);}
+  for(let i=pairs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pairs[i],pairs[j]]=[pairs[j],pairs[i]];}
+  const cols=4,rows=3,cw=160,ch=110,gx=20,gy=16;
+  const startX=(W-(cols*cw+(cols-1)*gx))/2, startY=44;
+  const cards=pairs.map((p,i)=>({person:p,flipped:false,matched:false,
+    x:startX+(i%cols)*(cw+gx), y:startY+Math.floor(i/cols)*(ch+gy), w:cw, h:ch}));
+  mgState={cards,flipped:[],checking:false,matches:0,mistakes:0,time:45*60};
+  mgHandlers.tap=(p)=>{
+    if(mgState.checking)return;
+    for(const c of mgState.cards){
+      if(c.matched||c.flipped)continue;
+      if(p.x>c.x&&p.x<c.x+c.w&&p.y>c.y&&p.y<c.y+c.h){
+        c.flipped=true; mgState.flipped.push(c); Snd.sfx.tap();
+        if(mgState.flipped.length===2){
+          mgState.checking=true;
+          setTimeout(()=>{
+            if(!mgRunning)return;
+            const [a,b]=mgState.flipped;
+            if(a.person===b.person){a.matched=b.matched=true;mgState.matches++;Snd.sfx.weaponSwitch();}
+            else{a.flipped=b.flipped=false;mgState.mistakes++;}
+            mgState.flipped=[]; mgState.checking=false;
+            if(mgState.matches>=6){
+              const bonus=Math.max(60,260+Math.round(mgState.time/60)*4-mgState.mistakes*15);
+              mgFinish(bonus,'全ペア発見!');
+            }
+          },650);
+        }
+        break;
+      }
+    }
+  };
+}
+function mgUpdateMemory(){
+  mgState.time--;
+  document.getElementById('mgStatus').textContent='残り '+Math.max(0,Math.ceil(mgState.time/60))+'秒 ・ ミス '+mgState.mistakes+' ・ '+mgState.matches+'/6組';
+  if(mgState.time<=0&&mgRunning){ mgFinish(Math.max(20,mgState.matches*35),'時間切れ('+mgState.matches+'/6組)'); }
+}
+function mgDrawMemory(){
+  mctx.fillStyle='#1c2a3d'; mctx.fillRect(0,0,W,H);
+  for(const c of mgState.cards){
+    mctx.save();
+    if(c.matched) mctx.globalAlpha=0.32;
+    mctx.fillStyle=(c.flipped||c.matched)?'#233650':'#3d5270';
+    mgRoundRect(mctx,c.x,c.y,c.w,c.h,10); mctx.fill();
+    mctx.strokeStyle='#8fa5c4'; mctx.lineWidth=2; mctx.stroke();
+    if(c.flipped||c.matched){ drawFaceCircle(mctx,mgPool[c.person],c.x+c.w/2,c.y+c.h/2,Math.min(c.w,c.h)/2-10); }
+    else{ mctx.fillStyle='#ffd94a'; mctx.font='bold 34px sans-serif'; mctx.textAlign='center'; mctx.textBaseline='middle'; mctx.fillText('?',c.x+c.w/2,c.y+c.h/2); }
+    mctx.restore();
+  }
+}
+
+/* ---------- ② 顔ハメもぐら叩き ---------- */
+function mgInitMole(){
+  document.getElementById('mgInstr').textContent='穴から出てきた顔を制限時間内にタップ!';
+  const cols=3,rows=3,r=64;
+  const startX=W/2-(cols-1)*190/2, startY=140;
+  const holes=[];
+  for(let i=0;i<cols*rows;i++) holes.push({x:startX+(i%cols)*190,y:startY+Math.floor(i/cols)*130,r,up:false,upT:0,person:0});
+  mgState={holes,time:20*60,hits:0,spawnT:40};
+  mgHandlers.tap=(p)=>{
+    for(const h of mgState.holes){
+      if(!h.up)continue;
+      if(Math.hypot(p.x-h.x,p.y-h.y)<h.r){ h.up=false; h.upT=0; mgState.hits++; Snd.sfx.hit(); vibrate(20); break; }
+    }
+  };
+}
+function mgUpdateMole(){
+  const st=mgState;
+  st.time--; st.spawnT--;
+  if(st.spawnT<=0){
+    const downHoles=st.holes.filter(h=>!h.up);
+    if(downHoles.length){
+      const h=downHoles[Math.floor(Math.random()*downHoles.length)];
+      h.up=true; h.upT=Math.max(28,55-Math.floor((1200-st.time)/40)); h.person=Math.floor(Math.random()*mgPool.length);
+    }
+    st.spawnT=26+Math.floor(Math.random()*22);
+  }
+  for(const h of st.holes){ if(h.up){h.upT--; if(h.upT<=0)h.up=false;} }
+  document.getElementById('mgStatus').textContent='残り '+Math.max(0,Math.ceil(st.time/60))+'秒 ・ HIT '+st.hits;
+  if(st.time<=0&&mgRunning) mgFinish(st.hits*35, st.hits+'匹ヒット!');
+}
+function mgDrawMole(){
+  mctx.fillStyle='#1c2a3d'; mctx.fillRect(0,0,W,H);
+  for(const h of mgState.holes){
+    mctx.fillStyle='#2a1c14'; mctx.beginPath(); mctx.ellipse(h.x,h.y+h.r*0.6,h.r,h.r*0.4,0,0,Math.PI*2); mctx.fill();
+    if(h.up) drawFaceCircle(mctx,mgPool[h.person],h.x,h.y-10,h.r*0.72);
+    mctx.fillStyle='#4a3b28'; mctx.beginPath(); mctx.ellipse(h.x,h.y+h.r*0.78,h.r*1.15,h.r*0.3,0,0,Math.PI*2); mctx.fill();
+  }
+}
+
+/* ---------- ③ 顔ハメ福笑い ---------- */
+function drawPart(g,type,x,y){
+  g.save(); g.translate(x,y);
+  g.strokeStyle='#3a2c1a'; g.fillStyle='#3a2c1a'; g.lineWidth=4; g.lineCap='round';
+  if(type==='eyebrows'){
+    g.beginPath(); g.moveTo(-38,-4); g.quadraticCurveTo(-20,-16,-2,-4); g.stroke();
+    g.beginPath(); g.moveTo(2,-4); g.quadraticCurveTo(20,-16,38,-4); g.stroke();
+  } else if(type==='eyes'){
+    g.beginPath(); g.arc(-20,0,9,0,Math.PI*2); g.fill();
+    g.beginPath(); g.arc(20,0,9,0,Math.PI*2); g.fill();
+  } else if(type==='nose'){
+    g.beginPath(); g.moveTo(0,-14); g.lineTo(10,14); g.lineTo(-10,14); g.closePath(); g.stroke();
+  } else if(type==='mouth'){
+    g.beginPath(); g.arc(0,-6,22,0.15*Math.PI,0.85*Math.PI); g.stroke();
+  }
+  g.restore();
+}
+function mgInitFukuwarai(){
+  document.getElementById('mgInstr').textContent='パーツをドラッグして正しい位置に顔を完成させよう(完成後に採点)。';
+  const cx=W/2, cy=210;
+  const targets={eyebrows:{x:cx,y:cy-66},eyes:{x:cx,y:cy-24},nose:{x:cx,y:cy+18},mouth:{x:cx,y:cy+64}};
+  const trayY=390;
+  const parts=[
+    {type:'eyebrows',x:140,y:trayY,placed:false},
+    {type:'eyes',    x:300,y:trayY,placed:false},
+    {type:'nose',    x:500,y:trayY,placed:false},
+    {type:'mouth',   x:660,y:trayY,placed:false},
+  ];
+  mgState={cx,cy,targets,parts,dragging:null,time:40*60,done:false};
+  mgHandlers.tap=(p)=>{
+    if(mgState.done)return;
+    let best=null,bd=1e9;
+    for(const pt of mgState.parts){ if(pt.placed)continue; const d=Math.hypot(p.x-pt.x,p.y-pt.y); if(d<55&&d<bd){bd=d;best=pt;} }
+    if(best) mgState.dragging=best;
+  };
+  mgHandlers.move=(p)=>{ if(mgState.dragging){ mgState.dragging.x=p.x; mgState.dragging.y=p.y; } };
+  mgHandlers.release=()=>{
+    if(mgState.dragging){ mgState.dragging.placed=true; mgState.dragging=null; Snd.sfx.tap(); }
+    if(mgState.parts.every(pt=>pt.placed)&&!mgState.done){
+      mgState.done=true;
+      let total=0;
+      for(const pt of mgState.parts){ const t=mgState.targets[pt.type]; const d=Math.hypot(pt.x-t.x,pt.y-t.y); total+=Math.max(0,100-d*0.7); }
+      const score=Math.round(total/4);
+      setTimeout(()=>mgFinish(Math.max(40,score*3),'完成度 '+score+'点!'),500);
+    }
+  };
+}
+function mgUpdateFukuwarai(){
+  mgState.time--;
+  document.getElementById('mgStatus').textContent = mgState.done?'完成!採点中…':'配置済み '+mgState.parts.filter(p=>p.placed).length+'/4 ・ 残り '+Math.max(0,Math.ceil(mgState.time/60))+'秒';
+  if(mgState.time<=0&&!mgState.done&&mgRunning){
+    mgState.done=true;
+    let total=0;
+    for(const pt of mgState.parts){ const t=mgState.targets[pt.type]; const d=pt.placed?Math.hypot(pt.x-t.x,pt.y-t.y):9999; total+=Math.max(0,100-d*0.7); }
+    const score=Math.round(total/4);
+    mgFinish(Math.max(20,score*2),'時間切れ('+score+'点)');
+  }
+}
+function mgDrawFukuwarai(){
+  mctx.fillStyle='#1c2a3d'; mctx.fillRect(0,0,W,H);
+  mctx.fillStyle='#f2d9b8';
+  mctx.beginPath(); mctx.ellipse(mgState.cx,mgState.cy,120,145,0,0,Math.PI*2); mctx.fill();
+  mctx.strokeStyle='#c9a876'; mctx.lineWidth=3; mctx.stroke();
+  mctx.fillStyle='rgba(255,255,255,.06)'; mctx.fillRect(40,355,W-80,70);
+  for(const pt of mgState.parts) drawPart(mctx,pt.type,pt.x,pt.y);
+}
+
+/* ---------- ④ 顔ハメ落ち物ゲーム ---------- */
+function mgInitDrop(){
+  document.getElementById('mgInstr').textContent='列をタップして顔を落とし、同じ人物を3つ以上そろえて消そう。';
+  const cols=6,rows=6,cell=56;
+  const gx=(W-cols*cell)/2, baseY=H-40;
+  const grid=Array.from({length:cols},()=>[]);
+  mgState={cols,rows,cell,gx,baseY,grid,next:Math.floor(Math.random()*Math.min(4,mgPool.length)),
+    clearedTotal:0,dropsLeft:24,time:60*60,flash:0};
+  mgHandlers.tap=(p)=>{
+    if(!mgRunning||mgState.dropsLeft<=0)return;
+    const col=Math.floor((p.x-mgState.gx)/mgState.cell);
+    if(col<0||col>=mgState.cols)return;
+    if(mgState.grid[col].length>=mgState.rows)return;
+    mgState.grid[col].push(mgState.next);
+    mgState.dropsLeft--;
+    Snd.sfx.tap();
+    mgResolveMatches();
+    mgState.next=Math.floor(Math.random()*Math.min(4,mgPool.length));
+    if(mgState.dropsLeft<=0){
+      setTimeout(()=>{ if(!mgRunning)return; mgFinish(Math.max(30,mgState.clearedTotal*18), mgState.clearedTotal+'個そろえた!'); },500);
+    }
+  };
+}
+function mgResolveMatches(){
+  const {cols,grid}=mgState;
+  let clearedAny;
+  do{
+    clearedAny=false;
+    const toClear=[];
+    for(let c=0;c<cols;c++){
+      let run=1;
+      for(let r=1;r<=grid[c].length;r++){
+        if(r<grid[c].length&&grid[c][r]===grid[c][r-1])run++;
+        else{ if(run>=3) for(let k=r-run;k<r;k++) toClear.push({c,idx:k}); run=1; }
+      }
+    }
+    const maxLen=Math.max(0,...grid.map(g=>g.length));
+    for(let idx=0; idx<maxLen; idx++){
+      let run=1;
+      for(let c=1;c<cols;c++){
+        const a=grid[c][idx], b=grid[c-1][idx];
+        if(a!==undefined&&a===b) run++;
+        else{ if(run>=3) for(let k=c-run;k<c;k++) toClear.push({c:k,idx}); run=1; }
+      }
+      if(run>=3) for(let k=cols-run;k<cols;k++) toClear.push({c:k,idx});
+    }
+    if(toClear.length){
+      clearedAny=true;
+      const byCol={};
+      toClear.forEach(({c,idx})=>{ (byCol[c]=byCol[c]||new Set()).add(idx); });
+      Object.keys(byCol).forEach(c=>{
+        const idxs=[...byCol[c]].sort((a,b)=>b-a);
+        idxs.forEach(i=>grid[c].splice(i,1));
+      });
+      mgState.clearedTotal+=toClear.length;
+      mgState.flash=10;
+      Snd.sfx.weaponSwitch();
+    }
+  }while(clearedAny);
+}
+function mgUpdateDrop(){
+  mgState.time--;
+  if(mgState.flash>0)mgState.flash--;
+  document.getElementById('mgStatus').textContent='残り '+Math.max(0,Math.ceil(mgState.time/60))+'秒 ・ 消去 '+mgState.clearedTotal+' ・ あと'+mgState.dropsLeft+'手';
+  if(mgState.time<=0&&mgRunning&&mgState.dropsLeft>0){
+    mgState.dropsLeft=0;
+    mgFinish(Math.max(30,mgState.clearedTotal*18),'時間切れ('+mgState.clearedTotal+'個)');
+  }
+}
+function mgDrawDrop(){
+  const st=mgState;
+  mctx.fillStyle='#1c2a3d'; mctx.fillRect(0,0,W,H);
+  mctx.fillStyle='#dbe6f5'; mctx.font='bold 14px sans-serif'; mctx.textAlign='left';
+  mctx.fillText('NEXT',20,20);
+  drawFaceCircle(mctx,mgPool[st.next],70,16,20);
+  for(let c=0;c<st.cols;c++) for(let r=0;r<st.rows;r++){
+    mctx.strokeStyle='rgba(255,255,255,.08)';
+    mctx.strokeRect(st.gx+c*st.cell, st.baseY-(r+1)*st.cell, st.cell, st.cell);
+  }
+  for(let c=0;c<st.cols;c++) for(let r=0;r<st.grid[c].length;r++){
+    const x=st.gx+c*st.cell+st.cell/2, y=st.baseY-r*st.cell-st.cell/2;
+    drawFaceCircle(mctx,mgPool[st.grid[c][r]],x,y,st.cell/2-5);
+  }
+  if(st.flash>0){ mctx.fillStyle='rgba(255,255,255,'+(st.flash/10*0.35)+')'; mctx.fillRect(0,0,W,H); }
+}
+
+/* ---------- ⑤ 顔ハメだるまさんがころんだ ---------- */
+function mgInitStatue(){
+  document.getElementById('mgInstr').textContent='「進む」ボタンで前進。振り向いた瞬間にタップすると失敗!';
+  mgState={watching:false,switchT:90+Math.floor(Math.random()*60),progress:0,time:32*60,lastTapT:0,fail:false,turnFlash:0};
+  mgHandlers.tap=(p)=>{
+    const bx=W/2,by=H-70,br=55;
+    if(Math.hypot(p.x-bx,p.y-by)>br)return;
+    if(mgState.fail||mgState.progress>=100)return;
+    if(mgState.watching){
+      mgState.fail=true; Snd.sfx.hurt(); vibrate([80,40,80]);
+      setTimeout(()=>{ if(mgRunning) mgFinish(15,'振り向かれた…失敗'); },700);
+      return;
+    }
+    const now=performance.now();
+    if(now-mgState.lastTapT<110)return;
+    mgState.lastTapT=now;
+    mgState.progress=Math.min(100,mgState.progress+7);
+    Snd.sfx.tap();
+    if(mgState.progress>=100){
+      const bonus=Math.max(80,200+Math.round(mgState.time/60)*6);
+      setTimeout(()=>{ if(mgRunning) mgFinish(bonus,'ゴール!'); },400);
+    }
+  };
+}
+function mgUpdateStatue(){
+  const st=mgState;
+  if(st.fail||st.progress>=100)return;
+  st.time--; st.switchT--;
+  if(st.turnFlash>0)st.turnFlash--;
+  if(st.switchT<=0){
+    st.watching=!st.watching; st.turnFlash=12;
+    st.switchT = st.watching ? (55+Math.floor(Math.random()*45)) : (75+Math.floor(Math.random()*90));
+    if(st.watching) Snd.sfx.bossHit();
+  }
+  document.getElementById('mgStatus').textContent='進行度 '+st.progress+'% ・ 残り '+Math.max(0,Math.ceil(st.time/60))+'秒';
+  if(st.time<=0&&mgRunning) mgFinish(Math.max(20,Math.round(st.progress*1.5)),'時間切れ(進行度'+st.progress+'%)');
+}
+function mgDrawStatue(){
+  const st=mgState;
+  mctx.fillStyle='#1c2a3d'; mctx.fillRect(0,0,W,H);
+  const person=mgPool.find(p=>p.label==='ボス')||mgPool[0];
+  const cx=W/2,cy=170;
+  mctx.save(); if(!st.watching) mctx.globalAlpha=0.4;
+  drawFaceCircle(mctx,person,cx,cy,100);
+  mctx.restore();
+  if(st.watching){ mctx.strokeStyle='#ff4a4a'; mctx.lineWidth=6; mctx.beginPath(); mctx.arc(cx,cy,108,0,Math.PI*2); mctx.stroke(); }
+  mctx.fillStyle=st.watching?'#ff4a4a':'#5be36b'; mctx.font='bold 24px sans-serif'; mctx.textAlign='center';
+  mctx.fillText(st.watching?'こっちを見た!':'進んでOK', cx, 305);
+  mctx.fillStyle='rgba(255,255,255,.15)'; mctx.fillRect(150,330,500,26);
+  mctx.fillStyle='#5be36b'; mctx.fillRect(150,330,500*st.progress/100,26);
+  mctx.strokeStyle='#fff'; mctx.strokeRect(150,330,500,26);
+  const bx=W/2,by=H-70,br=55;
+  mctx.fillStyle=st.watching?'#5c1c1c':'#2e7d46';
+  mctx.beginPath(); mctx.arc(bx,by,br,0,Math.PI*2); mctx.fill();
+  mctx.strokeStyle='#fff'; mctx.lineWidth=3; mctx.stroke();
+  mctx.fillStyle='#fff'; mctx.font='bold 18px sans-serif'; mctx.fillText('進む',bx,by+6);
+  if(st.turnFlash>0){ mctx.fillStyle='rgba(255,74,74,'+(st.turnFlash/12*0.4)+')'; mctx.fillRect(0,0,W,H); }
+}
+
+/* ---------- ⑥ 顔ハメ横スクロール ---------- */
+function mgInitRunner(){
+  document.getElementById('mgInstr').textContent='タップでジャンプ!段ボールやパレットを飛び越えて生き残ろう。';
+  mgState={py:0,vy:0,onGround:true,groundY:360,obstacles:[],items:[],spawnT:70,itemT:140,
+    speed:5,time:32*60,dist:0,itemsGot:0,dead:false};
+  mgHandlers.tap=()=>{
+    if(mgState.dead)return;
+    if(mgState.onGround){ mgState.vy=-11.5; mgState.onGround=false; Snd.sfx.tap(); }
+  };
+}
+function mgUpdateRunner(){
+  const st=mgState;
+  if(st.dead)return;
+  st.time--; st.dist++;
+  st.speed=5+Math.min(4,st.dist/900);
+  st.vy+=0.55; st.py+=st.vy;
+  if(st.py>=0){ st.py=0; st.vy=0; st.onGround=true; }
+  st.spawnT--;
+  if(st.spawnT<=0){
+    st.obstacles.push({x:W+30,w:34+Math.random()*26,h:34+Math.random()*30,type:Math.random()<.5?'box':'pallet'});
+    st.spawnT=Math.max(30,55+Math.floor(Math.random()*35)-Math.floor(st.dist/300));
+  }
+  st.itemT--;
+  if(st.itemT<=0){ st.items.push({x:W+30,y:-90-Math.random()*40}); st.itemT=160+Math.floor(Math.random()*100); }
+  const px=140;
+  for(const o of st.obstacles) o.x-=st.speed;
+  for(const it of st.items) it.x-=st.speed;
+  st.obstacles=st.obstacles.filter(o=>o.x>-60);
+  st.items=st.items.filter(it=>it.x>-60);
+  const playerFootY=st.groundY+st.py;
+  for(const o of st.obstacles){
+    if(Math.abs(o.x-px)<28+o.w/2 && playerFootY>st.groundY-o.h+10){
+      st.dead=true; Snd.sfx.hurt(); vibrate([100,60,100]);
+      const bonus=Math.max(30,Math.round(st.dist/12)+st.itemsGot*20);
+      setTimeout(()=>{ if(mgRunning) mgFinish(bonus,'激突!距離 '+Math.round(st.dist/6)+'m'); },700);
+      return;
+    }
+  }
+  for(const it of st.items){
+    if(!it.got && Math.abs(it.x-px)<30 && Math.abs(it.y-(st.py-40))<30){ it.got=true; st.itemsGot++; Snd.sfx.weaponSwitch(); }
+  }
+  st.items=st.items.filter(it=>!it.got);
+  document.getElementById('mgStatus').textContent='距離 '+Math.round(st.dist/6)+'m ・ アイテム '+st.itemsGot+' ・ 残り '+Math.max(0,Math.ceil(st.time/60))+'秒';
+  if(st.time<=0&&mgRunning){
+    st.dead=true;
+    mgFinish(Math.max(60,Math.round(st.dist/12)+st.itemsGot*20+80), 'ゴール!距離 '+Math.round(st.dist/6)+'m');
+  }
+}
+function mgDrawRunner(){
+  const st=mgState;
+  mctx.fillStyle='#1c2a3d'; mctx.fillRect(0,0,W,H);
+  mctx.fillStyle='#33475f'; mctx.fillRect(0,0,W,st.groundY);
+  mctx.fillStyle='#4a3b28'; mctx.fillRect(0,st.groundY,W,H-st.groundY);
+  mctx.fillStyle='#5c4a33'; mctx.fillRect(0,st.groundY,W,6);
+  const px=140, py=st.groundY+st.py;
+  const hero = charCfg.hero.faceImg ? {img:charCfg.hero.faceImg} : mgPool[0];
+  drawFaceCircle(mctx,hero,px,py-34,30);
+  mctx.fillStyle='#7da7d9'; mctx.fillRect(px-16,py-6,32,26);
+  for(const o of st.obstacles){
+    mctx.fillStyle = o.type==='box' ? '#8a6b45' : '#6b5334';
+    mctx.fillRect(o.x-o.w/2, st.groundY-o.h, o.w, o.h);
+    mctx.strokeStyle='rgba(0,0,0,.3)'; mctx.strokeRect(o.x-o.w/2, st.groundY-o.h, o.w, o.h);
+    mctx.fillStyle='#dbe6f5'; mctx.font='bold 11px sans-serif'; mctx.textAlign='center';
+    mctx.fillText(o.type==='box'?'段ボール':'パレット', o.x, st.groundY-o.h/2+4);
+  }
+  for(const it of st.items){
+    mctx.fillStyle='#ffd94a'; mctx.beginPath(); mctx.arc(it.x, st.groundY+it.y, 16, 0, Math.PI*2); mctx.fill();
+    mctx.fillStyle='#3a2c00'; mctx.font='bold 13px sans-serif'; mctx.textAlign='center';
+    mctx.fillText('★', it.x, st.groundY+it.y+4);
+  }
 }
 
 /* ================= 背景 ================= */
