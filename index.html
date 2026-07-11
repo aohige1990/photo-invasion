@@ -583,8 +583,8 @@ const MAINS = [
   desc:'3方向に拡散。至近距離で撃つと威力2倍になり敵を突き放す。'},
  {id:'rocket',  name:'ロケットランチャー', price:1500, dmg:6,   rate:48, death:'explode', splash:85, oneShotAoe:true,
   desc:'着弾点で小さく爆発。範囲内のボス以外は即撃破。'},
- {id:'beam',    name:'ビームガン',       price:2500, dmg:4,   rate:30, death:'ash', autoBeam:true, maxTargets:5,
-  desc:'画面上の敵に自動で複数の光線が命中する追尾ビーム。'},
+ {id:'beam',    name:'ビームガン',       price:2500, dmg:10,  rate:30, death:'ash', autoBeam:true, maxTargets:5, execHits:2,
+  desc:'画面上の敵に自動で複数の光線が命中する追尾ビーム。ボス以外はHP10以下なら1発、それ以上でも2発当てれば必ず撃破。'},
  {id:'rail',    name:'レールガン',       price:4000, dmg:6,   rate:70, death:'pierce', hitscan:true, oneShot:true,
   desc:'向いている方向へ一直線。ボス以外は一撃で貫き倒す。'},
 ];
@@ -886,6 +886,7 @@ function renderShop(){
       if (d.oneShot) stats += ' / ボス以外は即撃破';
       if (d.oneShotAoe) stats += ' / 範囲内のボス以外は即撃破';
       if (d.autoBeam) stats += ' / 最大'+d.maxTargets+'体に自動命中';
+      if (d.execHits) stats += ' / ボス以外は'+d.execHits+'発で確殺';
     }
     const lvTag = own ? ('Lv '+lv+(lv>=MAX_LV?' MAX':'')) : (unlocked ? ('$'+d.price) : 'LOCKED');
     el.innerHTML =
@@ -1537,7 +1538,15 @@ function fireMain(){
     for(const e of targets){
       const tx=e.x, ty=e.y-55*e.scale;
       beams.push({x1:bx,y1:by,x2:tx,y2:ty,life:14,maxLife:14,width:6,color:'#7ae7ff'});
-      hitEnemy(e,dmg,w.death,Math.sign(tx-player.x)||1,0);
+      const hitDir=Math.sign(tx-player.x)||1;
+      if(w.execHits){
+        e.beamHits=(e.beamHits||0)+1;
+        if(!e.boss && e.beamHits>=w.execHits){
+          hitEnemy(e,e.hp+9999,w.death,hitDir,0);   // 2発目は残りHPに関わらず即撃破
+          continue;
+        }
+      }
+      hitEnemy(e,dmg,w.death,hitDir,0);
     }
     shake=Math.max(shake,targets.length?4:0);
     return;
