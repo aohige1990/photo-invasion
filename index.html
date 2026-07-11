@@ -118,7 +118,12 @@
     border-radius:18px;padding:16px 26px;display:flex;flex-direction:column;align-items:center;gap:10px;
     box-shadow:0 8px 22px rgba(0,0,0,.55);}
   #ovPause .pause-card h2{font-size:22px;color:var(--ui);margin:0;}
+  #ovWeaponSelect{background:rgba(6,10,18,.55);justify-content:flex-start;padding-top:5vh;}
+  #ovWeaponSelect .pause-card{pointer-events:auto;background:rgba(15,24,38,.96);border:2px solid #3d5270;
+    border-radius:18px;padding:16px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;
+    box-shadow:0 8px 22px rgba(0,0,0,.55);max-height:82vh;overflow-y:auto;}
   #ovWeaponSelect .pause-card h2{font-size:19px;color:var(--ui);margin:0;}
+  #ovWeaponSelect .tab-row{position:sticky;top:0;background:rgba(15,24,38,.96);padding-bottom:2px;z-index:1;}
   .weapon-opt{width:100%;background:#233650;border:2px solid #3d5270;border-radius:12px;
     padding:10px 14px;display:flex;justify-content:space-between;align-items:center;
     color:#dbe6f5;font-size:14px;font-weight:bold;cursor:pointer;}
@@ -441,8 +446,8 @@ const MAINS = [
  {id:'shotgun', name:'ショットガン',     price:800,  dmg:1,   rate:32, death:'knockback', pellets:3, spread:.14, knock:0,
   closeRange:110, closeMul:2, closeKnock:22,
   desc:'3方向に拡散。至近距離で撃つと威力2倍になり敵を突き放す。'},
- {id:'rocket',  name:'ロケットランチャー', price:1500, dmg:6,   rate:48, death:'explode', splash:85,
-  desc:'着弾点で小さく爆発。範囲内の敵をまとめて爆殺。'},
+ {id:'rocket',  name:'ロケットランチャー', price:1500, dmg:6,   rate:48, death:'explode', splash:85, oneShotAoe:true,
+  desc:'着弾点で小さく爆発。範囲内のボス以外は即撃破。'},
  {id:'beam',    name:'ビームガン',       price:2500, dmg:4,   rate:30, death:'ash', autoBeam:true, maxTargets:5,
   desc:'画面上の敵に自動で複数の光線が命中する追尾ビーム。'},
  {id:'rail',    name:'レールガン',       price:4000, dmg:6,   rate:70, death:'pierce', hitscan:true, oneShot:true,
@@ -458,7 +463,7 @@ const SUBS = [
  {id:'chainsaw', name:'チェーンソー', price:1200, dmg:1.3, rate:6, range:65, death:'shred', knock:6,
   desc:'押しっぱなしで連続攻撃。敵を挽き潰し、少し遠ざける。'},
  {id:'barrier',  name:'バリア',       price:1000, barrier:true, dur:180, cd:720,
-  desc:'数秒間無敵になり、その間は敵の動きも止まる。Lvで持続時間UP。'},
+  desc:'数秒間無敵になり、近づいた敵を弾き飛ばす。Lvで持続時間UP。'},
 ];
 const MAX_LV = 5;
 const lvMul = lv => 1 + 0.25*(lv-1);
@@ -716,6 +721,7 @@ function renderShop(){
       stats = '威力 '+dmg+' / 連射 '+(60/d.rate).toFixed(1)+'発毎秒';
       if (d.closeRange) stats += '(至近距離 '+(dmg*d.closeMul).toFixed(1)+')';
       if (d.oneShot) stats += ' / ボス以外は即撃破';
+      if (d.oneShotAoe) stats += ' / 範囲内のボス以外は即撃破';
       if (d.autoBeam) stats += ' / 最大'+d.maxTargets+'体に自動命中';
     }
     const lvTag = own ? ('Lv '+lv+(lv>=MAX_LV?' MAX':'')) : (unlocked ? ('$'+d.price) : 'LOCKED');
@@ -1428,7 +1434,8 @@ function update(){
           for(const e2 of enemies){
             if(!canHit(e2))continue;
             if(Math.abs(e2.x-b.x)<b.wpn.splash && Math.abs((e2.y-50*e2.scale)-b.y)<b.wpn.splash){
-              hitEnemy(e2,b.dmg,'explode',Math.sign(e2.x-b.x)||1,6);
+              const dmg2 = e2.boss ? b.dmg : e2.hp+9999;   // ボス以外は即撃破
+              hitEnemy(e2,dmg2,'explode',Math.sign(e2.x-b.x)||1,6);
             }
           }
           return false;
@@ -1456,18 +1463,12 @@ function update(){
     if(e.flash>0)e.flash--;
     if(e.boss) bossPos = {x:e.x, y:e.y};
 
-    // バリア展開中: 全ての敵の動きを停止(近くにいれば弾き飛ばしのみ動く)
-    if(player.barrier>0){
-      if(e.state==='walk'){
-        const d=Math.abs(e.x-player.x);
-        if(d<70*PS){
-          e.knock=Math.sign(e.x-player.x||1)*8; burst(e.x,e.y-50,'#7ab8ff',4);
-        } else if(e.knock!==0){
-          e.x+=e.knock; e.knock*=.72; if(Math.abs(e.knock)<.3)e.knock=0;
-        }
+    // バリア展開中: 近くにいる敵だけ弾き飛ばす(敵の動き自体は止めない)
+    if(player.barrier>0 && e.state==='walk'){
+      const d=Math.abs(e.x-player.x);
+      if(d<70*PS){
+        e.knock=Math.sign(e.x-player.x||1)*8; burst(e.x,e.y-50,'#7ab8ff',4);
       }
-      // emerge/fall のタイマーもそのまま停止(時間が進まない)
-      continue;
     }
 
     // 這い出し中: 地中でせり上がるだけ。無敵で移動しない
@@ -1494,8 +1495,8 @@ function update(){
         burst(e.x, GROUND-4, '#8a6b45', 14, 1.3);
         rings.push({x:e.x,y:GROUND-4,r:6,maxR:55,life:16,color:'rgba(180,150,110,.9)'});
         Snd.sfx.land();
-        // 着地の衝撃で近くにいるとダメージ
-        if(player.hurt<=0 && Math.abs(e.x-player.x)<52){
+        // 着地の衝撃で近くにいるとダメージ(バリア中は無効)
+        if(player.hurt<=0 && player.barrier<=0 && Math.abs(e.x-player.x)<52){
           player.hp-=1; player.hurt=70; shake=12;
           burst(player.x,player.y-50*PS,'#ff4a4a',10);
           Snd.sfx.hurt();
@@ -1512,10 +1513,10 @@ function update(){
       }
     }
 
-    // 接触ダメージ(落下中の敵は上から重なった時にも当たる)
+    // 接触ダメージ(落下中の敵は上から重なった時にも当たる。バリア中は無効)
     const dx=Math.abs(e.x-player.x);
     const dy=e.y-player.y;
-    if(player.hurt<=0 && dx<18*PS+10*e.scale && dy>-105*PS && dy<25){
+    if(player.hurt<=0 && player.barrier<=0 && dx<18*PS+10*e.scale && dy>-105*PS && dy<25){
       player.hp-=e.touch; player.hurt=70; shake=10;
       burst(player.x,player.y-50*PS,'#ff4a4a',10);
       Snd.sfx.hurt();
