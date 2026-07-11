@@ -274,7 +274,11 @@
 <!-- 武器選択(一時停止して選ぶ) -->
 <div class="overlay" id="ovWeaponSelect">
   <div class="pause-card" style="max-width:320px;width:88vw;">
-    <h2>メイン武器を選択</h2>
+    <h2 id="weaponSelectTitle">武器を選択</h2>
+    <div class="tab-row" style="max-width:none;">
+      <button class="tab-btn on" id="wsTabMain">メイン</button>
+      <button class="tab-btn" id="wsTabSub">サブ</button>
+    </div>
     <div id="weaponSelectList" style="display:flex;flex-direction:column;gap:8px;width:100%;"></div>
     <button class="btn sub" id="weaponSelectClose">閉じる</button>
   </div>
@@ -907,10 +911,13 @@ function togglePause(){ if(!running)return; paused=!paused; ovPause.classList.to
 
 /* ================= 武器選択(一時停止して選ぶ) ================= */
 const ovWeaponSelect = document.getElementById('ovWeaponSelect');
+let weaponSelectTab='main';
 function openWeaponSelect(){
   if(!running)return;
-  const owned = MAINS.filter(m=>sv.main[m.id] && sv.main[m.id].own);
-  if(owned.length<2)return;
+  const ownedMain = MAINS.filter(m=>isMainOwned(m.id));
+  const ownedSub  = SUBS.filter(s=>isSubOwned(s.id));
+  if(ownedMain.length<2 && ownedSub.length<2)return;
+  weaponSelectTab = ownedMain.length>=2 ? 'main' : 'sub';
   paused=true;
   renderWeaponSelect();
   ovWeaponSelect.classList.add('show');
@@ -921,25 +928,53 @@ function closeWeaponSelect(){
   paused=false;
 }
 function renderWeaponSelect(){
+  document.getElementById('wsTabMain').classList.toggle('on', weaponSelectTab==='main');
+  document.getElementById('wsTabSub').classList.toggle('on', weaponSelectTab==='sub');
+  document.getElementById('weaponSelectTitle').textContent = weaponSelectTab==='main' ? 'メイン武器を選択' : 'サブ武器を選択';
   const list=document.getElementById('weaponSelectList');
   list.innerHTML='';
-  const owned = MAINS.filter(m=>sv.main[m.id] && sv.main[m.id].own);
-  owned.forEach(m=>{
-    const lv = sv.main[m.id].lv;
-    const isCur = sv.eqMain===m.id;
-    const b=document.createElement('div');
-    b.className='weapon-opt'+(isCur?' cur':'');
-    b.innerHTML = '<span>'+m.name+'</span><span class="lv">Lv'+lv+(isCur?' ・装備中':'')+'</span>';
-    b.onclick=()=>{
-      if(!isCur){
-        sv.eqMain=m.id; saveGame(); Snd.sfx.weaponSwitch();
-        addFloat(player.x, player.y-120, m.name, '#8fd2ff');
-      }
-      closeWeaponSelect();
-    };
-    list.appendChild(b);
-  });
+  if(weaponSelectTab==='main'){
+    const owned = MAINS.filter(m=>isMainOwned(m.id));
+    const eqId = mode==='endless' ? endlessEqMain : sv.eqMain;
+    owned.forEach(m=>{
+      const lv = mode==='endless' ? 1 : (sv.main[m.id]?sv.main[m.id].lv:1);
+      const isCur = eqId===m.id;
+      const b=document.createElement('div');
+      b.className='weapon-opt'+(isCur?' cur':'');
+      b.innerHTML = '<span>'+m.name+'</span><span class="lv">'+(mode==='endless'?'':'Lv'+lv)+(isCur?' ・装備中':'')+'</span>';
+      b.onclick=()=>{
+        if(!isCur){
+          if(mode==='endless') endlessEqMain=m.id; else { sv.eqMain=m.id; saveGame(); }
+          Snd.sfx.weaponSwitch();
+          addFloat(player.x, player.y-120, m.name, '#8fd2ff');
+        }
+        closeWeaponSelect();
+      };
+      list.appendChild(b);
+    });
+  } else {
+    const owned = SUBS.filter(s=>isSubOwned(s.id));
+    const eqId = mode==='endless' ? endlessEqSub : sv.eqSub;
+    owned.forEach(s=>{
+      const lv = mode==='endless' ? 1 : (sv.sub[s.id]?sv.sub[s.id].lv:1);
+      const isCur = eqId===s.id;
+      const b=document.createElement('div');
+      b.className='weapon-opt'+(isCur?' cur':'');
+      b.innerHTML = '<span>'+s.name+'</span><span class="lv">'+(mode==='endless'?'':'Lv'+lv)+(isCur?' ・装備中':'')+'</span>';
+      b.onclick=()=>{
+        if(!isCur){
+          if(mode==='endless') endlessEqSub=s.id; else { sv.eqSub=s.id; saveGame(); }
+          Snd.sfx.weaponSwitch();
+          addFloat(player.x, player.y-120, s.name, '#c3aaff');
+        }
+        closeWeaponSelect();
+      };
+      list.appendChild(b);
+    });
+  }
 }
+document.getElementById('wsTabMain').onclick=()=>{ weaponSelectTab='main'; renderWeaponSelect(); };
+document.getElementById('wsTabSub').onclick =()=>{ weaponSelectTab='sub';  renderWeaponSelect(); };
 document.getElementById('weaponSelectClose').onclick=closeWeaponSelect;
 
 /* ================= ゲーム状態 ================= */
@@ -949,10 +984,45 @@ let player, enemies, bullets, deaths, particles, floats, rings, beams, swings, b
 let kills, earned, wave, spawnT, time, shake;
 let bossSpeech=null, bossPos=null, bossDefeatDelay=0;
 
-function curMain(){ return MAINS.find(m=>m.id===sv.eqMain); }
-function curSub(){ return SUBS.find(s=>s.id===sv.eqSub); }
-function mainLv(){ const s=sv.main[sv.eqMain]; return s?s.lv:1; }
-function subLv(){ const s=sv.sub[sv.eqSub]; return s?s.lv:1; }
+/* エンドレス専用の武器所持状態(コイン不要・撃破数に応じて自動解放。ステージモードの
+   購入済みデータ sv.main / sv.sub とは完全に切り離して管理する) */
+let endlessMain=['handgun'], endlessSub=['punch'];
+let endlessEqMain='handgun', endlessEqSub='punch';
+const ENDLESS_UNLOCKS = [
+  {wave:2, type:'main', id:'gatling'},
+  {wave:3, type:'sub',  id:'knife'},
+  {wave:4, type:'main', id:'shotgun'},
+  {wave:5, type:'sub',  id:'katana'},
+  {wave:6, type:'main', id:'rocket'},
+  {wave:7, type:'sub',  id:'chainsaw'},
+  {wave:8, type:'main', id:'beam'},
+  {wave:9, type:'sub',  id:'barrier'},
+  {wave:10,type:'main', id:'rail'},
+];
+function grantEndlessUnlock(w){
+  const entry = ENDLESS_UNLOCKS.find(u=>u.wave===w);
+  if(!entry) return;
+  const def = (entry.type==='main' ? MAINS : SUBS).find(x=>x.id===entry.id);
+  if(!def) return;
+  if(entry.type==='main'){
+    if(!endlessMain.includes(entry.id)) endlessMain.push(entry.id);
+    endlessEqMain = entry.id;
+  } else {
+    if(!endlessSub.includes(entry.id)) endlessSub.push(entry.id);
+    endlessEqSub = entry.id;
+  }
+  addFloat(W/2, 160, '武器入手: '+def.name+' !', '#8fd2ff');
+  Snd.sfx.levelup();
+  vibrate([40,40,80]);
+}
+
+function isMainOwned(id){ return mode==='endless' ? endlessMain.includes(id) : !!(sv.main[id] && sv.main[id].own); }
+function isSubOwned(id){ return mode==='endless' ? endlessSub.includes(id)  : !!(sv.sub[id]  && sv.sub[id].own); }
+
+function curMain(){ return MAINS.find(m=>m.id===(mode==='endless'?endlessEqMain:sv.eqMain)); }
+function curSub(){ return SUBS.find(s=>s.id===(mode==='endless'?endlessEqSub:sv.eqSub)); }
+function mainLv(){ if(mode==='endless')return 1; const s=sv.main[sv.eqMain]; return s?s.lv:1; }
+function subLv(){ if(mode==='endless')return 1; const s=sv.sub[sv.eqSub]; return s?s.lv:1; }
 
 // ボスのセリフ選択
 function pickLine(key){
@@ -977,6 +1047,8 @@ function startGame(m, st){
   kills=0;earned=0;wave=1;time=0;shake=0;
   stageKills=0;bossSpawned=false;
   bossSpeech=null;bossPos=null;bossDefeatDelay=0;
+  endlessMain=['handgun']; endlessSub=['punch'];
+  endlessEqMain='handgun'; endlessEqSub='punch';
   if(mode==='stage'){
     stageTarget = (stage%5===0) ? 0 : 8 + stage*3;   // 5の倍数はボス戦
     spawnT=50;
@@ -994,8 +1066,8 @@ function isBossStage(){ return mode==='stage' && stage%5===0; }
 // 出現可能な敵種類を武器の所持状況で解放
 function pickKind(){
   const pool=['walker','walker','walker'];
-  if(sv.main.rocket && sv.main.rocket.own) pool.push('burrower','burrower');
-  if(sv.main.rail   && sv.main.rail.own)   pool.push('diver','diver');
+  if(isMainOwned('rocket')) pool.push('burrower','burrower');
+  if(isMainOwned('rail'))   pool.push('diver','diver');
   return pool[Math.floor(Math.random()*pool.length)];
 }
 const clampX = v => Math.max(45, Math.min(W-45, v));
@@ -1066,9 +1138,11 @@ function snapshotEnemy(e){
 }
 function killEnemy(e, deathType, hitDir){
   kills++;
-  const gain = (e.boss ? 300+stage*40 : 20+Math.floor(Math.random()*30)+(mode==='stage'?stage*2:Math.floor(kills/5)));
-  earned += gain;
-  addFloat(e.x, e.y-110*e.scale, '+$'+gain, '#ffd94a');
+  if(mode==='stage'){
+    const gain = (e.boss ? 300+stage*40 : 20+Math.floor(Math.random()*30)+stage*2);
+    earned += gain;
+    addFloat(e.x, e.y-110*e.scale, '+$'+gain, '#ffd94a');
+  }
   Snd.sfx.kill();
   const snap=snapshotEnemy(e);
   const d={type:deathType, snap, w:snap.width, h:snap.height,
@@ -1125,7 +1199,10 @@ function killEnemy(e, deathType, hitDir){
   deaths.push(d);
   if(!e.boss) burst(e.x,e.y-50*e.scale,'#a06bc9',8);
   // 進行管理
-  if(mode==='endless' && kills%10===0){ wave++; addFloat(W/2,120,'WAVE '+wave+' !','#5be36b'); }
+  if(mode==='endless' && kills%10===0){
+    wave++; addFloat(W/2,120,'WAVE '+wave+' !','#5be36b');
+    grantEndlessUnlock(wave);
+  }
   if(mode==='stage'){
     stageKills++;
     if(e.boss){
@@ -1485,10 +1562,15 @@ function gameOver(){
   controls.classList.remove('show');
   bankCoins();
   Snd.stopMusic(); Snd.sfx.gameOver();
-  document.getElementById('overStat').innerHTML =
-    (mode==='stage'?('STAGE '+stage+'<br>'):'')+
-    '撃破数 <b>'+kills+'</b><br>獲得コイン <b>$'+_lastEarned+'</b>'+
-    '<br>所持コイン <b>$'+sv.coins+'</b>';
+  if(mode==='endless'){
+    const weaponsGot = (endlessMain.length-1)+(endlessSub.length-1);
+    document.getElementById('overStat').innerHTML =
+      '到達 <b>WAVE '+wave+'</b><br>撃破数 <b>'+kills+'</b><br>入手武器 <b>'+weaponsGot+'</b> 種';
+  } else {
+    document.getElementById('overStat').innerHTML =
+      'STAGE '+stage+'<br>撃破数 <b>'+kills+'</b><br>獲得コイン <b>$'+_lastEarned+'</b>'+
+      '<br>所持コイン <b>$'+sv.coins+'</b>';
+  }
   ovOver.classList.add('show');
 }
 
@@ -1563,9 +1645,9 @@ function drawHUD(){
   }
   // 装備表示
   ctx.font='bold 13px sans-serif';ctx.fillStyle='#dbe6f5';
-  ctx.fillText(curMain().name+' Lv'+mainLv(),16,86);
+  ctx.fillText(curMain().name+(mode==='endless'?'':' Lv'+mainLv()),16,86);
   const s=curSub();
-  let subTxt=s.name+' Lv'+subLv();
+  let subTxt=s.name+(mode==='endless'?'':' Lv'+subLv());
   if(s.barrier){
     if(player.barrier>0)subTxt+=' 展開中';
     else if(player.barrierCd>0)subTxt+=' CT '+Math.ceil(player.barrierCd/60)+'s';
