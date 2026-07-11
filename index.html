@@ -58,6 +58,11 @@
   .line-input{width:100%;background:#233650;color:#dbe6f5;border:1px solid #3d5270;border-radius:10px;
     padding:8px 10px;font-size:13px;line-height:1.6;resize:vertical;font-family:inherit;}
   .hint{color:#8fa5c4;font-size:12px;text-align:center;max-width:520px;line-height:1.7;}
+  .backup-card{background:#1b2b44;border:2px solid #34496b;border-radius:16px;padding:16px;
+    width:min(520px,92vw);display:flex;flex-direction:column;gap:10px;align-items:stretch;}
+  .backup-card h2{color:#dbe6f5;font-size:16px;text-align:left;}
+  .backup-card .line-input{font-family:monospace;font-size:12px;word-break:break-all;}
+  .backup-card .hint{max-width:none;text-align:left;}
 
   /* ショップ */
   .shop-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center;}
@@ -138,8 +143,35 @@
   <button class="btn" id="goEndless">エンドレス</button>
   <button class="btn green" id="goShop">ショップ</button>
   <button class="btn sub" id="goSetup">キャラ設定</button>
+  <button class="btn sub" id="goBackup">データのバックアップ</button>
   <button class="btn sub" id="muteBtnTitle">🔊 サウンドON</button>
   <p class="hint" id="titleInfo"></p>
+</div>
+
+<!-- バックアップ -->
+<div class="screen" id="scrBackup">
+  <h1 style="font-size:clamp(20px,5vw,30px);">データのバックアップ</h1>
+  <p class="hint" style="max-width:560px;">
+    このゲームの進捗(コイン・武器・ステージ)は今開いているブラウザの中にだけ保存されています。
+    別のブラウザや別の端末に引き継ぎたい場合、機種変更する場合、または削除の予防として、
+    下のコードを控えておいてください。<br>
+    ※キャラ設定で登録した顔写真・セリフはこのコードには含まれません(写真は端末を閉じるたびに再設定が必要です)。
+  </p>
+  <div class="backup-card">
+    <h2>① コードを書き出す</h2>
+    <button class="pick-btn" id="genCodeBtn" style="background:#2e7d46;">最新のコードを生成</button>
+    <textarea class="line-input" id="codeOut" rows="4" readonly placeholder="ここにコードが表示されます"></textarea>
+    <button class="pick-btn" id="copyCodeBtn" style="background:#3d5270;">コピーする</button>
+    <p class="hint" id="copyMsg" style="min-height:16px;"></p>
+  </div>
+  <div class="backup-card">
+    <h2>② コードを読み込む</h2>
+    <p class="hint" style="margin:0;">控えておいたコードを貼り付けて復元します。現在の進捗は上書きされます。</p>
+    <textarea class="line-input" id="codeIn" rows="4" placeholder="ここにコードを貼り付け"></textarea>
+    <button class="pick-btn" id="restoreBtn" style="background:#7d5ae0;">このコードで復元する</button>
+    <p class="hint" id="restoreMsg" style="min-height:16px;"></p>
+  </div>
+  <button class="btn" id="backupDone">タイトルへ戻る</button>
 </div>
 
 <!-- キャラ設定 -->
@@ -594,6 +626,7 @@ setInterval(()=>{ if (scrSetup.classList.contains('show')) drawPreviews(); },120
 const scrTitle=document.getElementById('scrTitle');
 const scrSetup=document.getElementById('scrSetup');
 const scrShop =document.getElementById('scrShop');
+const scrBackup=document.getElementById('scrBackup');
 const controls=document.getElementById('controls');
 const ovPause =document.getElementById('ovPause');
 const ovOver  =document.getElementById('ovOver');
@@ -727,6 +760,71 @@ document.getElementById('goSetup').onclick=()=>{
 document.getElementById('setupDone').onclick=()=>{ scrSetup.classList.remove('show'); scrTitle.classList.add('show'); };
 document.getElementById('goEndless').onclick=()=>startGame('endless',1);
 document.getElementById('goStage').onclick =()=>startGame('stage', sv.maxStage);
+
+/* ================= データのバックアップ ================= */
+document.getElementById('goBackup').onclick=()=>{
+  scrTitle.classList.remove('show'); scrBackup.classList.add('show');
+  document.getElementById('codeOut').value='';
+  document.getElementById('codeIn').value='';
+  document.getElementById('copyMsg').textContent='';
+  document.getElementById('restoreMsg').textContent='';
+};
+document.getElementById('backupDone').onclick=()=>{ scrBackup.classList.remove('show'); scrTitle.classList.add('show'); };
+
+function exportSaveCode(){
+  const json = JSON.stringify(sv);
+  return 'PI1-' + btoa(unescape(encodeURIComponent(json)));
+}
+function importSaveCode(code){
+  code = code.trim();
+  if(code.startsWith('PI1-')) code = code.slice(4);
+  const json = decodeURIComponent(escape(atob(code)));
+  const obj = JSON.parse(json);
+  if(typeof obj!=='object' || !obj.main || !obj.sub) throw new Error('形式が不正です');
+  return obj;
+}
+document.getElementById('genCodeBtn').onclick=()=>{
+  document.getElementById('codeOut').value = exportSaveCode();
+  document.getElementById('copyMsg').textContent='';
+  Snd.sfx.tap();
+};
+document.getElementById('copyCodeBtn').onclick=async ()=>{
+  const ta=document.getElementById('codeOut');
+  if(!ta.value){ document.getElementById('copyMsg').textContent='先に「最新のコードを生成」を押してください'; return; }
+  try{
+    await navigator.clipboard.writeText(ta.value);
+    document.getElementById('copyMsg').textContent='コピーしました';
+  }catch(e){
+    ta.removeAttribute('readonly'); ta.focus(); ta.select();
+    try{ document.execCommand('copy'); document.getElementById('copyMsg').textContent='コピーしました'; }
+    catch(e2){ document.getElementById('copyMsg').textContent='コピーできませんでした。手動で選択してコピーしてください'; }
+    ta.setAttribute('readonly','readonly');
+  }
+};
+document.getElementById('restoreBtn').onclick=()=>{
+  const msg=document.getElementById('restoreMsg');
+  const code=document.getElementById('codeIn').value;
+  if(!code.trim()){ msg.style.color='#ff9a3a'; msg.textContent='コードを貼り付けてください'; return; }
+  try{
+    const obj = importSaveCode(code);
+    sv.coins   = obj.coins||0;
+    sv.main    = obj.main||{handgun:{own:true,lv:1}};
+    sv.sub     = obj.sub ||{punch:{own:true,lv:1}};
+    sv.eqMain  = obj.eqMain||'handgun';
+    sv.eqSub   = obj.eqSub ||'punch';
+    sv.maxStage= obj.maxStage||1;
+    if(obj.bossLines) sv.bossLines = obj.bossLines;
+    if(typeof obj.muted==='boolean') sv.muted = obj.muted;
+    saveGame();
+    refreshTitle(); updateMuteButtons();
+    msg.style.color='#5be36b';
+    msg.textContent='復元しました(所持コイン $'+sv.coins+' / STAGE '+sv.maxStage+' まで到達)';
+    Snd.sfx.levelup();
+  }catch(e){
+    msg.style.color='#ff4a4a';
+    msg.textContent='コードを読み取れませんでした。コピーミスがないか確認してください';
+  }
+};
 document.getElementById('retryBtn').onclick=()=>{ ovOver.classList.remove('show'); startGame(mode, mode==='stage'?stage:1); };
 document.getElementById('nextBtn').onclick =()=>{ ovClear.classList.remove('show'); startGame('stage', stage+1); };
 document.getElementById('titleBtn').onclick=()=>{ ovOver.classList.remove('show'); toTitle(); };
