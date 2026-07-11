@@ -240,6 +240,50 @@
   </div>
   <div class="setup-grid" style="max-width:640px;">
     <div class="card" style="width:100%;">
+      <h2>ミニゲーム用キャラ(神経衰弱・もぐら叩きなどで使用)</h2>
+      <p class="hint" style="margin:0;">未設定の枠は色付きのプレースホルダーで自動的に補われます。</p>
+    </div>
+  </div>
+  <div class="setup-grid">
+    <div class="card">
+      <h2>ミニゲームキャラ①</h2>
+      <canvas id="prevMgExtra1" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="mgExtra1" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="mgExtra1" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileMgExtra1" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="mgExtra1">未設定に戻す</button>
+    </div>
+    <div class="card">
+      <h2>ミニゲームキャラ②</h2>
+      <canvas id="prevMgExtra2" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="mgExtra2" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="mgExtra2" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileMgExtra2" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="mgExtra2">未設定に戻す</button>
+    </div>
+    <div class="card">
+      <h2>ミニゲームキャラ③</h2>
+      <canvas id="prevMgExtra3" width="150" height="170"></canvas>
+      <div class="mode-row">
+        <button class="mode-btn on" data-who="mgExtra3" data-mode="face">顔はめ込み</button>
+        <button class="mode-btn" data-who="mgExtra3" data-mode="body">全身画像</button>
+      </div>
+      <label class="pick-btn">画像フォルダから選ぶ
+        <input type="file" id="fileMgExtra3" accept="image/*">
+      </label>
+      <button class="reset-btn" data-reset="mgExtra3">未設定に戻す</button>
+    </div>
+  </div>
+  <div class="setup-grid" style="max-width:640px;">
+    <div class="card" style="width:100%;">
       <h2>ボスのセリフ</h2>
       <p class="hint" style="margin:0;">改行区切りで複数登録すると、その中からランダムに選ばれます。</p>
       <label class="line-label">登場時</label>
@@ -536,7 +580,10 @@ loadGame();
 const charCfg = {
   hero:  { mode:'face', faceImg:null, bodyImg:null },
   enemy: { mode:'face', faceImg:null, bodyImg:null },
-  boss:  { mode:'face', faceImg:null, bodyImg:null }
+  boss:  { mode:'face', faceImg:null, bodyImg:null },
+  mgExtra1: { mode:'face', faceImg:null, bodyImg:null },
+  mgExtra2: { mode:'face', faceImg:null, bodyImg:null },
+  mgExtra3: { mode:'face', faceImg:null, bodyImg:null }
 };
 // ボス専用画像が未設定なら敵と同じ画像を使う
 function enemyCfg(e){
@@ -652,8 +699,13 @@ function drawEnemy(g, footX, footY, dir, walk, cfg, flash, scale){
 const prevHero  = document.getElementById('prevHero').getContext('2d');
 const prevEnemy = document.getElementById('prevEnemy').getContext('2d');
 const prevBoss  = document.getElementById('prevBoss').getContext('2d');
+const prevMgExtra1 = document.getElementById('prevMgExtra1').getContext('2d');
+const prevMgExtra2 = document.getElementById('prevMgExtra2').getContext('2d');
+const prevMgExtra3 = document.getElementById('prevMgExtra3').getContext('2d');
 function drawPreviews(){
-  [[prevHero,'hero',drawHero],[prevEnemy,'enemy',drawEnemy],[prevBoss,'boss',drawEnemy]].forEach(([g,who,fn])=>{
+  [[prevHero,'hero',drawHero],[prevEnemy,'enemy',drawEnemy],[prevBoss,'boss',drawEnemy],
+   [prevMgExtra1,'mgExtra1',drawEnemy],[prevMgExtra2,'mgExtra2',drawEnemy],[prevMgExtra3,'mgExtra3',drawEnemy]
+  ].forEach(([g,who,fn])=>{
     g.clearRect(0,0,150,170);
     g.fillStyle='#2c3e57'; g.fillRect(0,0,150,170);
     g.fillStyle='#4a3b28'; g.fillRect(0,150,150,20);
@@ -911,6 +963,9 @@ function toTitle(){ controls.classList.remove('show'); running=false; scrTitle.c
 document.getElementById('fileHero').onchange =e=>{ if(e.target.files[0]) loadPhoto('hero', e.target.files[0]); e.target.value=''; };
 document.getElementById('fileEnemy').onchange=e=>{ if(e.target.files[0]) loadPhoto('enemy',e.target.files[0]); e.target.value=''; };
 document.getElementById('fileBoss').onchange =e=>{ if(e.target.files[0]) loadPhoto('boss', e.target.files[0]); e.target.value=''; };
+document.getElementById('fileMgExtra1').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra1', e.target.files[0]); e.target.value=''; };
+document.getElementById('fileMgExtra2').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra2', e.target.files[0]); e.target.value=''; };
+document.getElementById('fileMgExtra3').onchange =e=>{ if(e.target.files[0]) loadPhoto('mgExtra3', e.target.files[0]); e.target.value=''; };
 document.querySelectorAll('.mode-btn').forEach(b=>{
   b.onclick=()=>{
     charCfg[b.dataset.who].mode=b.dataset.mode;
@@ -1666,7 +1721,10 @@ function facePool(){
   if(charCfg.boss.faceImg || charCfg.boss.bodyImg) addPerson(charCfg.boss, 'ボス', '#ff5a4a');
   else addPerson(charCfg.enemy, 'ボス', '#ff5a4a');
   addPerson(charCfg.enemy, '敵', '#a06bc9');
-  const extra=['#e0a458','#5bc8af','#e06b9a','#8bd450','#f2c14e','#6ba3e0','#c77dff','#4fd1c5'];
+  addPerson(charCfg.mgExtra1, 'キャラ①', '#e0a458');
+  addPerson(charCfg.mgExtra2, 'キャラ②', '#5bc8af');
+  addPerson(charCfg.mgExtra3, 'キャラ③', '#e06b9a');
+  const extra=['#8bd450','#f2c14e','#6ba3e0','#c77dff','#4fd1c5','#e0a458'];
   let i=0;
   while(list.length<6){ list.push({img:null,label:String.fromCharCode(65+i),color:extra[i%extra.length]}); i++; }
   return list;
