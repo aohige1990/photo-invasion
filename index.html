@@ -1656,10 +1656,14 @@ miniCv.width = W; miniCv.height = H;
 
 function facePool(){
   const list=[];
-  if(charCfg.hero.faceImg)  list.push({img:charCfg.hero.faceImg,  label:'主人公', color:'#7da7d9'});
-  if(charCfg.boss.faceImg)  list.push({img:charCfg.boss.faceImg,  label:'ボス',   color:'#ff5a4a'});
-  else if(charCfg.enemy.faceImg) list.push({img:charCfg.enemy.faceImg, label:'ボス', color:'#ff5a4a'});
-  if(charCfg.enemy.faceImg) list.push({img:charCfg.enemy.faceImg, label:'敵',     color:'#a06bc9'});
+  const addPerson=(cfg,label,color)=>{
+    if(cfg.mode==='body' && cfg.bodyImg) list.push({img:cfg.bodyImg, isBody:true, label, color});
+    else if(cfg.faceImg) list.push({img:cfg.faceImg, isBody:false, label, color});
+  };
+  addPerson(charCfg.hero, '主人公', '#7da7d9');
+  if(charCfg.boss.faceImg || charCfg.boss.bodyImg) addPerson(charCfg.boss, 'ボス', '#ff5a4a');
+  else addPerson(charCfg.enemy, 'ボス', '#ff5a4a');
+  addPerson(charCfg.enemy, '敵', '#a06bc9');
   const extra=['#e0a458','#5bc8af','#e06b9a','#8bd450','#f2c14e','#6ba3e0','#c77dff','#4fd1c5'];
   let i=0;
   while(list.length<6){ list.push({img:null,label:String.fromCharCode(65+i),color:extra[i%extra.length]}); i++; }
@@ -1668,8 +1672,17 @@ function facePool(){
 function drawFaceCircle(g,person,x,y,r){
   g.save();
   g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.closePath(); g.clip();
-  if(person.img){ g.drawImage(person.img, x-r, y-r, r*2, r*2); }
-  else{
+  if(person.img){
+    if(person.isBody){
+      // 全身画像は上部(頭〜肩まわり)を正方形に切り出して丸アイコンにする
+      const iw=person.img.width, ih=person.img.height;
+      const cropSize=Math.min(iw, ih*0.55);
+      const sx=(iw-cropSize)/2, sy=0;
+      g.drawImage(person.img, sx, sy, cropSize, cropSize, x-r, y-r, r*2, r*2);
+    } else {
+      g.drawImage(person.img, x-r, y-r, r*2, r*2);
+    }
+  } else{
     g.fillStyle=person.color||'#7da7d9'; g.fillRect(x-r,y-r,r*2,r*2);
     g.fillStyle='rgba(255,255,255,.92)'; g.font='bold '+Math.round(r*1.05)+'px sans-serif';
     g.textAlign='center'; g.textBaseline='middle';
@@ -2257,13 +2270,19 @@ function mgDrawRunner(){
   mctx.fillStyle='#5c4a33'; mctx.fillRect(0,st.groundY,W,6);
   const px=140;
   const py = st.flying ? st.groundY-130+Math.sin(st.dist*0.15)*8 : st.groundY+st.py;
-  const hero = charCfg.hero.faceImg ? {img:charCfg.hero.faceImg} : mgPool[0];
+  const heroUsesBody = charCfg.hero.mode==='body' && charCfg.hero.bodyImg;
   if(st.flying){
     mctx.strokeStyle='rgba(199,125,255,.7)'; mctx.lineWidth=3;
     mctx.beginPath(); mctx.moveTo(px-42,py+22); mctx.lineTo(px-12,py+6); mctx.stroke();
   }
-  drawFaceCircle(mctx,hero,px,py-34,30);
-  mctx.fillStyle='#7da7d9'; mctx.fillRect(px-16,py-6,32,26);
+  if(heroUsesBody){
+    const b=charCfg.hero.bodyImg, hgt=78, wid=hgt*b.width/b.height;
+    mctx.drawImage(b, px-wid/2, py-hgt, wid, hgt);
+  } else {
+    const hero = charCfg.hero.faceImg ? {img:charCfg.hero.faceImg,isBody:false} : mgPool[0];
+    drawFaceCircle(mctx,hero,px,py-34,30);
+    mctx.fillStyle='#7da7d9'; mctx.fillRect(px-16,py-6,32,26);
+  }
   if(st.shieldGround>0||st.shieldOverhead>0){
     mctx.strokeStyle='rgba(122,184,255,.8)'; mctx.lineWidth=3;
     mctx.beginPath(); mctx.arc(px,py-20,42,0,Math.PI*2); mctx.stroke();
