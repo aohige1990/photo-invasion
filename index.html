@@ -149,8 +149,24 @@
   <button class="btn green" id="goShop">ショップ</button>
   <button class="btn sub" id="goSetup">キャラ設定</button>
   <button class="btn sub" id="goBackup">データのバックアップ</button>
+  <button class="btn sub" id="goMgTest">ミニゲームをテスト</button>
   <button class="btn sub" id="muteBtnTitle">🔊 サウンドON</button>
   <p class="hint" id="titleInfo"></p>
+</div>
+
+<!-- ミニゲームテスト選択 -->
+<div class="screen" id="scrMgTest">
+  <h1 style="font-size:clamp(20px,5vw,30px);">ミニゲームをテスト</h1>
+  <p class="hint">ボスを倒さなくても好きなミニゲームを直接試せます(コインボーナスは加算されません)。</p>
+  <div style="display:flex;flex-direction:column;gap:10px;width:min(420px,90vw);">
+    <button class="btn green" id="mgt1">① 顔ハメ神経衰弱</button>
+    <button class="btn green" id="mgt2">② 顔ハメもぐら叩き</button>
+    <button class="btn green" id="mgt3">③ 顔ハメ福笑い</button>
+    <button class="btn green" id="mgt4">④ 顔ハメ落ち物ゲーム</button>
+    <button class="btn green" id="mgt5">⑤ 顔ハメだるまさんがころんだ</button>
+    <button class="btn green" id="mgt6">⑥ 顔ハメ横スクロール</button>
+  </div>
+  <button class="btn sub" id="mgTestBack">タイトルへ戻る</button>
 </div>
 
 <!-- バックアップ -->
@@ -649,6 +665,7 @@ const scrSetup=document.getElementById('scrSetup');
 const scrShop =document.getElementById('scrShop');
 const scrBackup=document.getElementById('scrBackup');
 const scrMinigame=document.getElementById('scrMinigame');
+const scrMgTest=document.getElementById('scrMgTest');
 const controls=document.getElementById('controls');
 const ovPause =document.getElementById('ovPause');
 const ovOver  =document.getElementById('ovOver');
@@ -1658,7 +1675,7 @@ miniCv.addEventListener('mousemove',e=>{if(mgMouseDown&&mgHandlers.move)mgHandle
 miniCv.addEventListener('mouseup',  e=>{mgMouseDown=false; if(mgHandlers.release)mgHandlers.release();});
 miniCv.addEventListener('mouseleave',e=>{if(mgMouseDown){mgMouseDown=false; if(mgHandlers.release)mgHandlers.release();}});
 
-let mgType=1, mgRunning=false, mgState=null, mgPool=[], mgBossCount=0;
+let mgType=1, mgRunning=false, mgState=null, mgPool=[], mgBossCount=0, mgTestMode=false;
 const MG_NAMES={1:'顔ハメ神経衰弱',2:'顔ハメもぐら叩き',3:'顔ハメ福笑い',4:'顔ハメ落ち物ゲーム',5:'顔ハメだるまさんがころんだ',6:'顔ハメ横スクロール'};
 const MG_INIT={1:()=>mgInitMemory(),2:()=>mgInitMole(),3:()=>mgInitFukuwarai(),4:()=>mgInitDrop(),5:()=>mgInitStatue(),6:()=>mgInitRunner()};
 const MG_UPDATE={1:()=>mgUpdateMemory(),2:()=>mgUpdateMole(),3:()=>mgUpdateFukuwarai(),4:()=>mgUpdateDrop(),5:()=>mgUpdateStatue(),6:()=>mgUpdateRunner()};
@@ -1667,6 +1684,7 @@ const MG_DRAW={1:()=>mgDrawMemory(),2:()=>mgDrawMole(),3:()=>mgDrawFukuwarai(),4
 function startBossMinigame(){
   mgBossCount++;
   mgType = ((mgBossCount-1)%6)+1;
+  mgTestMode=false;
   mgPool = facePool();
   paused = true;
   scrMinigame.classList.add('show');
@@ -1676,6 +1694,23 @@ function startBossMinigame(){
   MG_INIT[mgType]();
   requestAnimationFrame(mgLoop);
 }
+function startMinigameTest(type){
+  mgType = type;
+  mgTestMode = true;
+  mgPool = facePool();
+  scrTitle.classList.remove('show');
+  scrMinigame.classList.add('show');
+  document.getElementById('mgResult').textContent='';
+  document.getElementById('mgTitle').textContent = MG_NAMES[type]+'(テストプレイ)';
+  mgRunning=true;
+  MG_INIT[type]();
+  requestAnimationFrame(mgLoop);
+}
+[1,2,3,4,5,6].forEach(i=>{
+  document.getElementById('mgt'+i).onclick=()=>{ scrMgTest.classList.remove('show'); startMinigameTest(i); };
+});
+document.getElementById('goMgTest').onclick=()=>{ scrTitle.classList.remove('show'); scrMgTest.classList.add('show'); };
+document.getElementById('mgTestBack').onclick=()=>{ scrMgTest.classList.remove('show'); scrTitle.classList.add('show'); };
 function mgLoop(){
   if(!mgRunning) return;
   MG_UPDATE[mgType]();
@@ -1687,10 +1722,11 @@ function mgFinish(bonus, resultText){
   mgRunning=false;
   mgHandlers.tap=null; mgHandlers.move=null; mgHandlers.release=null;
   bonus=Math.max(0,Math.round(bonus));
-  document.getElementById('mgResult').textContent = resultText+'  (+$'+bonus+')';
+  document.getElementById('mgResult').textContent = resultText + (mgTestMode?'':'  (+$'+bonus+')');
   Snd.sfx.levelup(); vibrate([40,30,40]);
   setTimeout(()=>{
     scrMinigame.classList.remove('show');
+    if(mgTestMode){ mgTestMode=false; scrTitle.classList.add('show'); refreshTitle(); return; }
     paused=false;
     earned += bonus;
     stageClear();
@@ -1701,9 +1737,11 @@ document.getElementById('mgSkip').onclick=()=>{
   mgRunning=false;
   mgHandlers.tap=null; mgHandlers.move=null; mgHandlers.release=null;
   scrMinigame.classList.remove('show');
+  if(mgTestMode){ mgTestMode=false; scrTitle.classList.add('show'); refreshTitle(); return; }
   paused=false;
   stageClear();
 };
+
 
 /* ---------- ① 顔ハメ神経衰弱 ---------- */
 function mgInitMemory(){
