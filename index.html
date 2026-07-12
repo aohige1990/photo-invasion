@@ -2407,7 +2407,7 @@ function mgUpdateRunner(){
     if(!canOverhead) type = r<0.55?'box':'pallet';
     else type = r<0.45?'box' : r<0.8?'pallet' : 'overhead';
     if(type==='overhead'){
-      st.obstacles.push({x:W+30,w:70,h:38,type,oy:190});
+      st.obstacles.push({x:W+30,w:74,h:34,type,oy:78});
     } else {
       const h = 30+Math.random()*28;
       const w = 34+Math.random()*26;
@@ -2508,7 +2508,18 @@ function drawCartObstacleIcon(g,cx,bottom,w,h){
   g.beginPath(); g.arc(x+w*0.84,bottom-h*0.06,h*0.09,0,Math.PI*2); g.stroke();
 }
 function drawOverheadIcon(g,cx,y,w,h){
+  // 天井(画面上端)から鎖で吊るされた警告看板として描画し、
+  // 「落下してくる物」ではなく「頭上に固定された障害物」であることを視覚的に明示する。
+  g.strokeStyle='#5a5f66'; g.lineWidth=3;
+  g.beginPath(); g.moveTo(cx-w*0.32,0); g.lineTo(cx-w*0.32,y); g.stroke();
+  g.beginPath(); g.moveTo(cx+w*0.32,0); g.lineTo(cx+w*0.32,y); g.stroke();
+  for(let cy=6; cy<y; cy+=14){
+    g.strokeStyle='#8a8f96'; g.lineWidth=1.5;
+    g.beginPath(); g.arc(cx-w*0.32,cy,3,0,Math.PI*2); g.stroke();
+    g.beginPath(); g.arc(cx+w*0.32,cy,3,0,Math.PI*2); g.stroke();
+  }
   g.fillStyle='#ff8a3a'; g.fillRect(cx-w/2,y,w,h);
+  g.strokeStyle='#2a1c14'; g.lineWidth=2; g.strokeRect(cx-w/2,y,w,h);
   g.fillStyle='#2a1c14';
   for(let i=0;i<4;i++) g.fillRect(cx-w/2+i*(w/4),y,w/8,h);
   g.fillStyle='#1c1208';
