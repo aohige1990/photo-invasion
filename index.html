@@ -759,7 +759,11 @@ function drawEnemy(g, footX, footY, dir, walk, cfg, flash, scale){
   g.save(); g.translate(footX, footY); g.scale(dir*scale, scale);
   if (flash>0) g.globalAlpha=.5;
   if (cfg.mode==='body' && cfg.bodyImg){
-    const b=cfg.bodyImg, h=150, w=h*b.width/b.height;
+    const b=cfg.bodyImg;
+    // ボス(スケールが大きい)は基準サイズを下げ、画面上の実寸が大きくなりすぎて
+    // 上部のセリフ欄・HPバーと重ならないようにする
+    const h = scale>=2 ? 92 : 150;
+    const w=h*b.width/b.height;
     g.drawImage(b,-w/2,-h,w,h); g.restore(); return;
   }
   const leg=Math.sin(walk)*8, bodyC='#a06bc9', darkC='#6e4691';
