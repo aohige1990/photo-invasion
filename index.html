@@ -762,7 +762,7 @@ function drawEnemy(g, footX, footY, dir, walk, cfg, flash, scale){
     const b=cfg.bodyImg;
     // ボス(スケールが大きい)は基準サイズを下げ、画面上の実寸が大きくなりすぎて
     // 上部のセリフ欄・HPバーと重ならないようにする
-    const h = scale>=2 ? 92 : 150;
+    const h = scale>=2 ? 110 : 150;
     const w=h*b.width/b.height;
     g.drawImage(b,-w/2,-h,w,h); g.restore(); return;
   }
@@ -2845,12 +2845,20 @@ function loop(){
         ctx.fill();
         continue;
       }
-      drawEnemy(ctx,e.x,e.y,e.dir,e.walk,enemyCfg(e),e.flash,e.scale);
+      const cfgFor=enemyCfg(e);
+      drawEnemy(ctx,e.x,e.y,e.dir,e.walk,cfgFor,e.flash,e.scale);
+      // HPバーは実際の頭の高さ(顔ハメ/全身画像で異なる)に連動させ、浮いて見えないようにする
+      const headTop = (cfgFor.mode==='body' && cfgFor.bodyImg) ? (e.boss?110:150) : 108;
+      const barY = e.y - headTop*e.scale - 4;
       if(e.hp<e.maxHp){
         const bw=40*e.scale;
-        ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(e.x-bw/2,e.y-112*e.scale,bw,5);
+        ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(e.x-bw/2,barY,bw,5);
         ctx.fillStyle=e.boss?'#ff5a4a':'#ffbf3a';
-        ctx.fillRect(e.x-bw/2,e.y-112*e.scale,bw*e.hp/e.maxHp,5);
+        ctx.fillRect(e.x-bw/2,barY,bw*e.hp/e.maxHp,5);
+      }
+      if(e.boss){
+        ctx.fillStyle='#ff5a4a'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+        ctx.fillText('BOSS', e.x, barY-4);
       }
     }
     drawDeaths(ctx);
@@ -2914,23 +2922,23 @@ function wrapText(g,text,x,y,maxChars,lh){
 function drawBossSpeech(){
   if(!bossSpeech) return;
   const a = bossSpeech.life>18 ? 1 : bossSpeech.life/18;
-  const bx=18, by=62, bw=W-36, bh=56;
+  const bx=18, by=62, bw=W-36, bh=40;
   ctx.globalAlpha=a;
   ctx.fillStyle='rgba(10,14,24,.85)';
-  roundRect(ctx,bx,by,bw,bh,14); ctx.fill();
+  roundRect(ctx,bx,by,bw,bh,12); ctx.fill();
   ctx.strokeStyle='#ff5a4a'; ctx.lineWidth=2;
-  roundRect(ctx,bx,by,bw,bh,14); ctx.stroke();
+  roundRect(ctx,bx,by,bw,bh,12); ctx.stroke();
   // アバター(ボス専用画像があればそれを使用)
   const bc = (charCfg.boss.faceImg||charCfg.boss.bodyImg) ? charCfg.boss : charCfg.enemy1;
   ctx.save();
-  ctx.beginPath(); ctx.arc(bx+34, by+bh/2, 21, 0, Math.PI*2); ctx.clip();
-  if(bc.faceImg){ ctx.drawImage(bc.faceImg, bx+13, by+bh/2-21, 42,42); }
-  else{ ctx.fillStyle='#a06bc9'; ctx.fillRect(bx+13,by+bh/2-21,42,42); }
+  ctx.beginPath(); ctx.arc(bx+27, by+bh/2, 15, 0, Math.PI*2); ctx.clip();
+  if(bc.faceImg){ ctx.drawImage(bc.faceImg, bx+12, by+bh/2-15, 30,30); }
+  else{ ctx.fillStyle='#a06bc9'; ctx.fillRect(bx+12,by+bh/2-15,30,30); }
   ctx.restore();
   ctx.strokeStyle='#ff5a4a'; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.arc(bx+34, by+bh/2, 21, 0, Math.PI*2); ctx.stroke();
-  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.textAlign='left';
-  wrapText(ctx, bossSpeech.text, bx+68, by+bh/2, 24, 19);
+  ctx.beginPath(); ctx.arc(bx+27, by+bh/2, 15, 0, Math.PI*2); ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold 13px sans-serif'; ctx.textAlign='left';
+  wrapText(ctx, bossSpeech.text, bx+52, by+bh/2, 20, 15);
   ctx.globalAlpha=1;
 }
 </script>
