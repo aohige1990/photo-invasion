@@ -437,6 +437,7 @@
 <div class="overlay" id="ovOver">
   <h2 style="color:var(--danger);text-shadow:0 4px 0 #5c0f0f;">GAME OVER</h2>
   <div class="stat" id="overStat"></div>
+  <div class="hint" id="overRank" style="min-height:18px;"></div>
   <button class="btn" id="retryBtn">もう一回</button>
   <button class="btn green" id="overShopBtn">ショップ</button>
   <button class="btn sub" id="titleBtn">タイトルへ</button>
@@ -1291,12 +1292,14 @@ function spawnEnemy(boss){
   const side=Math.random()<.5?-1:1;
   let hp, spd, scale, touch;
   if(boss){
-    hp = mode==='endless' ? 50 + wave*16 : 50 + stage*12;
-    spd=.7; scale=BS; touch=2;
+    // エンドレスの序盤ボスはハンドガン+パンチだけでも倒せる程度に抑え、以降ゆるやかに強くする
+    hp = mode==='endless' ? 20 + wave*11 : 50 + stage*12;
+    spd=.7; scale=BS; touch = mode==='endless' ? 1 : 2;
   } else if(mode==='stage'){
     hp = 2 + Math.floor(stage*.9); spd=.8+Math.random()*.6+Math.min(stage*.06,1.4); scale=ES; touch=1;
   } else {
-    hp = 2 + Math.floor(kills/8); spd=.8+Math.random()*.7+Math.min(kills*.02,1.2); scale=ES; touch=1;
+    // エンドレスの雑魚敵も序盤は緩やかに強くなるようにする
+    hp = 2 + Math.floor(kills/14); spd=.8+Math.random()*.6+Math.min(kills*.010,1.1); scale=ES; touch=1;
   }
   const kind = boss ? 'walker' : pickKind();
   const e = {
@@ -1757,13 +1760,17 @@ function update(){
     // ボス戦中もザコが少し湧く
     spawnT--;
     if(spawnT<=0){ spawnEnemy(false); spawnT=160+Math.random()*80; }
+  } else if(mode==='endless' && endlessBossPending){
+    // エンドレスのボス戦中は雑魚の湧きを大きく抑える(ボス+大量の雑魚で詰まないように)
+    spawnT--;
+    if(spawnT<=0){ spawnEnemy(false); spawnT=200+Math.random()*100; }
   } else {
     spawnT--;
     if(spawnT<=0){
       spawnEnemy(false);
       const base = mode==='stage'
         ? Math.max(35, 95-stage*4)
-        : Math.max(30, 110-kills*2);
+        : Math.max(38, 140-kills*0.9);
       spawnT=base+Math.random()*40;
     }
   }
