@@ -728,7 +728,7 @@ function drawHero(g, footX, footY, dir, walk, cfg, hurt, scale){
   g.save(); g.translate(footX, footY); g.scale(dir*scale, scale);
   if (hurt>0 && Math.floor(hurt/3)%2===0) g.globalAlpha=.45;
   if (cfg.mode==='body' && cfg.bodyImg){
-    const b=cfg.bodyImg, h=96, w=h*b.width/b.height;
+    const b=cfg.bodyImg, h=150, w=h*b.width/b.height;
     g.drawImage(b,-w/2,-h,w,h); g.restore(); return;
   }
   const leg=Math.sin(walk)*7;
@@ -759,7 +759,7 @@ function drawEnemy(g, footX, footY, dir, walk, cfg, flash, scale){
   g.save(); g.translate(footX, footY); g.scale(dir*scale, scale);
   if (flash>0) g.globalAlpha=.5;
   if (cfg.mode==='body' && cfg.bodyImg){
-    const b=cfg.bodyImg, h=96, w=h*b.width/b.height;
+    const b=cfg.bodyImg, h=150, w=h*b.width/b.height;
     g.drawImage(b,-w/2,-h,w,h); g.restore(); return;
   }
   const leg=Math.sin(walk)*8, bodyC='#a06bc9', darkC='#6e4691';
@@ -2624,7 +2624,7 @@ function mgDrawRunner(){
     mctx.beginPath(); mctx.moveTo(px-42,py+22); mctx.lineTo(px-12,py+6); mctx.stroke();
   }
   if(heroUsesBody){
-    const b=charCfg.hero.bodyImg, hgt=78, wid=hgt*b.width/b.height;
+    const b=charCfg.hero.bodyImg, hgt=100, wid=hgt*b.width/b.height;
     mctx.drawImage(b, px-wid/2, py-hgt, wid, hgt);
   } else {
     const hero = charCfg.hero.faceImg ? {img:charCfg.hero.faceImg,isBody:false} : mgPool[0];
