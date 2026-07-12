@@ -2419,7 +2419,7 @@ function pickRunnerItem(){
 function runnerPopup(st,text,color){ st.popups.push({text,color,x:140,y:st.groundY+st.py-70,life:40}); }
 
 function mgInitRunner(){
-  document.getElementById('mgInstr').textContent='タップでジャンプ!最初はヘルメットが必ず流れてきます。ぶつかるまで走り続ける距離チャレンジです。';
+  document.getElementById('mgInstr').textContent='タップでジャンプ!下の段ボール・パレットは飛び越え、上のバーはジャンプ中に頭をぶつけないよう注意。ぶつかるまでの距離を競います。';
   mgState={py:0,vy:0,onGround:true,groundY:360,obstacles:[],items:[],spawnT:70,itemT:70,itemsSpawned:0,
     speed:5,dist:0,itemsGot:0,dead:false,
     shieldGround:0,shieldOverhead:0,cartCharges:0,forkliftCharges:0,helmetGotOnce:false,
@@ -2446,13 +2446,12 @@ function mgUpdateRunner(){
   st.spawnT--;
   if(st.spawnT<=0){
     const r=Math.random();
-    // ヘルメットを一度でも入手するまでは「上からの落下物」は出現しない(理不尽な即死を防止)
-    const canOverhead = st.helmetGotOnce;
-    let type;
-    if(!canOverhead) type = r<0.55?'box':'pallet';
-    else type = r<0.45?'box' : r<0.8?'pallet' : 'overhead';
+    // 上の障害物(overhead)は「ジャンプした時だけ頭が当たる」高さのバー。
+    // 走り抜ければ当たらないので、最初から出現してよい(ヘルメット取得は解放条件ではない)。
+    let type = r<0.4?'box' : r<0.75?'pallet' : 'overhead';
     if(type==='overhead'){
-      st.obstacles.push({x:W+30,w:74,h:34,type,oy:78});
+      // プレイヤーがジャンプして頭が届く高さ帯に横バーを置く(地上のままなら当たらない)
+      st.obstacles.push({x:W+30,w:74,h:26,type,oy:st.groundY-150});
     } else {
       const h = 30+Math.random()*28;
       const w = 34+Math.random()*26;
@@ -2462,7 +2461,7 @@ function mgUpdateRunner(){
   }
   st.itemT--;
   if(st.itemT<=0){
-    // 最初に流れてくるアイテムは必ずヘルメット
+    // 最初に流れてくるアイテムは必ずヘルメット(頼りになるが取り忘れても即アウトにはならない)
     const def = st.itemsSpawned===0 ? RUNNER_ITEMS.find(i=>i.type==='helmet') : pickRunnerItem();
     st.itemsSpawned++;
     st.items.push({x:W+30,y:-90-Math.random()*40,def});
@@ -2476,12 +2475,17 @@ function mgUpdateRunner(){
   st.items=st.items.filter(it=>it.x>-60);
 
   if(!st.flying){
-    const playerFootY=st.groundY+st.py;
+    const playerFootY=st.groundY+st.py;      // 足元(py<=0で上に上がる)
+    const playerHeadY=playerFootY-96;         // 頭のてっぺんの目安
     for(let i=st.obstacles.length-1;i>=0;i--){
       const o=st.obstacles[i];
       let hit;
-      if(o.type==='overhead') hit = Math.abs(o.x-px) < 30+o.w/2;
-      else hit = Math.abs(o.x-px)<28+o.w/2 && playerFootY>st.groundY-o.h+10;
+      if(o.type==='overhead'){
+        // ジャンプして頭がバーの高さ帯に入った時だけ当たる(地上を走っていれば当たらない)
+        hit = Math.abs(o.x-px) < 30+o.w/2 && playerHeadY < o.oy+o.h;
+      } else {
+        hit = Math.abs(o.x-px)<28+o.w/2 && playerFootY>st.groundY-o.h+10;
+      }
       if(!hit) continue;
 
       let blocked=false;
@@ -2553,25 +2557,26 @@ function drawCartObstacleIcon(g,cx,bottom,w,h){
   g.beginPath(); g.arc(x+w*0.84,bottom-h*0.06,h*0.09,0,Math.PI*2); g.stroke();
 }
 function drawOverheadIcon(g,cx,y,w,h){
-  // 天井(画面上端)から鎖で吊るされた警告看板として描画し、
-  // 「落下してくる物」ではなく「頭上に固定された障害物」であることを視覚的に明示する。
+  // 天井から鎖で吊るされ、ジャンプした時にだけ頭が当たる高さにある横バー。
+  // 鎖は画面上端(0)からバー上端(y)まで伸ばす。
   g.strokeStyle='#5a5f66'; g.lineWidth=3;
   g.beginPath(); g.moveTo(cx-w*0.32,0); g.lineTo(cx-w*0.32,y); g.stroke();
   g.beginPath(); g.moveTo(cx+w*0.32,0); g.lineTo(cx+w*0.32,y); g.stroke();
-  for(let cy=6; cy<y; cy+=14){
+  for(let cy=6; cy<y; cy+=16){
     g.strokeStyle='#8a8f96'; g.lineWidth=1.5;
     g.beginPath(); g.arc(cx-w*0.32,cy,3,0,Math.PI*2); g.stroke();
     g.beginPath(); g.arc(cx+w*0.32,cy,3,0,Math.PI*2); g.stroke();
   }
-  g.fillStyle='#ff8a3a'; g.fillRect(cx-w/2,y,w,h);
+  // 黄×黒の警告バー
+  g.fillStyle='#ffb43a'; g.fillRect(cx-w/2,y,w,h);
   g.strokeStyle='#2a1c14'; g.lineWidth=2; g.strokeRect(cx-w/2,y,w,h);
   g.fillStyle='#2a1c14';
-  for(let i=0;i<4;i++) g.fillRect(cx-w/2+i*(w/4),y,w/8,h);
+  for(let i=0;i<5;i++) g.fillRect(cx-w/2+i*(w/5),y,w/10,h);
+  // 「頭上注意」を示す小さな三角マーク
   g.fillStyle='#1c1208';
-  g.beginPath(); g.moveTo(cx,y+h*0.15); g.lineTo(cx+h*0.28,y+h*0.85); g.lineTo(cx-h*0.28,y+h*0.85); g.closePath(); g.fill();
-  g.fillStyle='#ffd94a';
-  g.fillRect(cx-2,y+h*0.32,4,h*0.28);
-  g.beginPath(); g.arc(cx,y+h*0.7,2.5,0,Math.PI*2); g.fill();
+  g.beginPath(); g.moveTo(cx,y-14); g.lineTo(cx+9,y-2); g.lineTo(cx-9,y-2); g.closePath(); g.fill();
+  g.fillStyle='#ffd94a'; g.fillRect(cx-1.5,y-11,3,6);
+  g.beginPath(); g.arc(cx,y-3.5,1.6,0,Math.PI*2); g.fill();
 }
 function drawItemIcon(g,type,cx,cy,r){
   g.save(); g.translate(cx,cy);
