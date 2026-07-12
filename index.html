@@ -387,7 +387,7 @@
   <h1 id="mgTitle" style="font-size:clamp(16px,4.5vw,24px);margin-bottom:0;">ミニゲーム</h1>
   <p class="hint" id="mgInstr" style="margin:0;max-width:640px;">説明</p>
   <div id="mgStatus" style="color:#ffd94a;font-weight:bold;font-size:14px;min-height:18px;"></div>
-  <div id="mgWrap" style="position:relative;width:min(800px,96vw,125vh);aspect-ratio:800/450;flex-shrink:0;">
+  <div id="mgWrap" style="position:relative;width:min(800px,96vw);height:min(450px,54vw);flex-shrink:0;">
     <canvas id="miniCanvas" style="width:100%;height:100%;background:#1c2a3d;border-radius:14px;display:block;touch-action:none;"></canvas>
   </div>
   <div id="mgResult" class="hint" style="min-height:18px;color:#5be36b;font-weight:bold;"></div>
@@ -490,8 +490,8 @@ function toggleFullscreen(){
   }
 }
 document.getElementById('fullscreenBtn').onclick = toggleFullscreen;
-document.addEventListener('fullscreenchange', ()=>{ fitCanvas(); setTimeout(fitCanvas,120); });
-document.addEventListener('webkitfullscreenchange', ()=>{ fitCanvas(); setTimeout(fitCanvas,120); });
+document.addEventListener('fullscreenchange', ()=>{ fitCanvas(); setTimeout(()=>{fitCanvas();fitMiniCanvas();},120); });
+document.addEventListener('webkitfullscreenchange', ()=>{ fitCanvas(); setTimeout(()=>{fitCanvas();fitMiniCanvas();},120); });
 
 /* ================= サウンド & バイブ =================
    外部音源ファイルを使わず Web Audio API でその場合成。
@@ -2030,6 +2030,24 @@ function triggerWeaponMinigame(weaponId, returnMode){
   setTimeout(()=>startMinigame(type, returnMode, MG_NAMES[type]+' 武器獲得ボーナス!'), 350);
   return true;
 }
+function fitMiniCanvas(){
+  const wrap = document.getElementById('mgWrap');
+  const screen = document.getElementById('scrMinigame');
+  if(!wrap || !screen.classList.contains('show')) return;
+  // 画面全体からmgWrap以外(タイトル・説明・ステータス・結果・ランキング・ボタン)の高さを差し引く
+  let usedH = 0;
+  Array.from(screen.children).forEach(ch=>{ if(ch!==wrap) usedH += ch.offsetHeight + 6; });
+  const availH = Math.max(120, screen.clientHeight - usedH - 12);
+  const availW = screen.clientWidth * 0.96;
+  // 800:450 の比率を保って、幅と高さのどちらもはみ出さない最大サイズ
+  let w = Math.min(availW, 800);
+  let h = w * 450/800;
+  if(h > availH){ h = availH; w = h * 800/450; }
+  wrap.style.width = w + 'px';
+  wrap.style.height = h + 'px';
+}
+addEventListener('resize', fitMiniCanvas);
+
 function startMinigame(type, returnMode, titleSuffix){
   mgType = type;
   mgReturnMode = returnMode;
@@ -2040,6 +2058,8 @@ function startMinigame(type, returnMode, titleSuffix){
   document.getElementById('mgResult').textContent='';
   document.getElementById('mgRankList').textContent='';
   document.getElementById('mgTitle').textContent = titleSuffix || MG_NAMES[type];
+  // レイアウト確定後にキャンバスサイズを計算(説明文の行数が確定してから)
+  requestAnimationFrame(()=>{ fitMiniCanvas(); requestAnimationFrame(fitMiniCanvas); });
   mgRunning=true;
   MG_INIT[type]();
   requestAnimationFrame(mgLoop);
