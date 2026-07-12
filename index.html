@@ -1189,7 +1189,8 @@ let bossSpeech=null, bossPos=null, bossDefeatDelay=0;
    購入済みデータ sv.main / sv.sub とは完全に切り離して管理する) */
 let endlessMain=['handgun'], endlessSub=['punch'];
 let endlessEqMain='handgun', endlessEqSub='punch';
-let endlessBossPending=null;   // ボスを倒したら渡す武器(ENDLESS_UNLOCKSのエントリ)
+let endlessBossPending=null;   // ボスを倒したら渡す武器(ENDLESS_UNLOCKSのエントリ)。全武器解放後は{postgame:true}
+let endlessLastBossWave=0;     // 全武器解放後の定期ボスの重複出現防止
 const ENDLESS_UNLOCKS = [
   {wave:2, type:'main', id:'gatling'},
   {wave:3, type:'sub',  id:'knife'},
@@ -1219,7 +1220,8 @@ function grantEndlessUnlock(entry){
 
 function isMainOwned(id){ return mode==='endless' ? endlessMain.includes(id) : !!(sv.main[id] && sv.main[id].own); }
 function isSubOwned(id){ return mode==='endless' ? endlessSub.includes(id)  : !!(sv.sub[id]  && sv.sub[id].own); }
-// 現在のWAVEですでに解放条件を満たしているのに未入手の武器があればボスを出現させる
+// 現在のWAVEですでに解放条件を満たしているのに未入手の武器があればボスを出現させる。
+// 全武器を解放し終えた後は、5WAVEごとに報酬なしの「強敵」ボスが定期的に出現し続ける。
 function tryTriggerEndlessBoss(){
   if(endlessBossPending) return;
   const entry = ENDLESS_UNLOCKS.find(u=>{
@@ -1231,6 +1233,14 @@ function tryTriggerEndlessBoss(){
     spawnEnemy(true);
     const def=(entry.type==='main'?MAINS:SUBS).find(x=>x.id===entry.id);
     addFloat(W/2,150,'ボス出現!倒すと'+(def?def.name:'新武器')+'を入手','#ff5a4a');
+    return;
+  }
+  const allUnlocked = ENDLESS_UNLOCKS.every(u=>u.type==='main'?endlessMain.includes(u.id):endlessSub.includes(u.id));
+  if(allUnlocked && wave>10 && wave%5===0 && wave!==endlessLastBossWave){
+    endlessLastBossWave = wave;
+    endlessBossPending = {postgame:true};
+    spawnEnemy(true);
+    addFloat(W/2,150,'強敵出現!倒すと少し落ち着く','#ff5a4a');
   }
 }
 
@@ -1265,6 +1275,7 @@ function startGame(m, st){
   endlessMain=['handgun']; endlessSub=['punch'];
   endlessEqMain='handgun'; endlessEqSub='punch';
   endlessBossPending=null;
+  endlessLastBossWave=0;
   if(mode==='stage'){
     stageTarget = (stage%5===0) ? 0 : 8 + stage*3;   // 5の倍数はボス戦
     spawnT=50;
@@ -1292,14 +1303,19 @@ function spawnEnemy(boss){
   const side=Math.random()<.5?-1:1;
   let hp, spd, scale, touch;
   if(boss){
-    // エンドレスの序盤ボスはハンドガン+パンチだけでも倒せる程度に抑え、以降ゆるやかに強くする
-    hp = mode==='endless' ? 20 + wave*11 : 50 + stage*12;
+    // エンドレスの序盤ボスはハンドガン+パンチだけでも倒せる程度に抑え、以降ゆるやかに強くする。
+    // WAVE10(全武器解放)を過ぎると、定期的に出る強敵ボスはより急なカーブで強くなる。
+    if(mode==='endless'){
+      hp = wave<=10 ? 20+wave*11 : 130+(wave-10)*24;
+    } else {
+      hp = 50+stage*12;
+    }
     spd=.7; scale=BS; touch = mode==='endless' ? 1 : 2;
   } else if(mode==='stage'){
     hp = 2 + Math.floor(stage*.9); spd=.8+Math.random()*.6+Math.min(stage*.06,1.4); scale=ES; touch=1;
   } else {
-    // エンドレスの雑魚敵も序盤は緩やかに強くなるようにする
-    hp = 2 + Math.floor(kills/14); spd=.8+Math.random()*.6+Math.min(kills*.010,1.1); scale=ES; touch=1;
+    // エンドレスの雑魚敵も序盤は緩やかに強くなり、全武器解放後(kills100超)はさらに伸びる上限まで強くなる
+    hp = 2 + Math.floor(kills/14); spd=.8+Math.random()*.6+Math.min(kills*.009,1.6); scale=ES; touch=1;
   }
   const kind = boss ? 'walker' : pickKind();
   const e = {
@@ -1421,10 +1437,15 @@ function killEnemy(e, deathType, hitDir){
   // 進行管理
   if(mode==='endless'){
     if(e.boss){
-      // エンドレスのボスを倒すと、保留していた武器を入手
+      // エンドレスのボスを倒すと、保留していた武器を入手(全武器解放後は報酬なしの強敵)
       sayBoss('defeat',180); bossPos={x:e.x,y:e.y};
       Snd.sfx.bossHit();
-      if(endlessBossPending){ grantEndlessUnlock(endlessBossPending); endlessBossPending=null; }
+      if(endlessBossPending && endlessBossPending.postgame){
+        addFloat(W/2,140,'強敵撃破!','#5be36b');
+        endlessBossPending=null;
+      } else if(endlessBossPending){
+        grantEndlessUnlock(endlessBossPending); endlessBossPending=null;
+      }
       tryTriggerEndlessBoss();   // WAVEが先に進んでいた場合は続けて次のボスを出す
     } else {
       if(kills%10===0){ wave++; addFloat(W/2,120,'WAVE '+wave+' !','#5be36b'); }
@@ -1770,7 +1791,7 @@ function update(){
       spawnEnemy(false);
       const base = mode==='stage'
         ? Math.max(35, 95-stage*4)
-        : Math.max(38, 140-kills*0.9);
+        : Math.max(24, 140-kills*0.75);
       spawnT=base+Math.random()*40;
     }
   }
@@ -1792,6 +1813,18 @@ function bankCoins(){
   _lastEarned=earned;
   if(earned>0){ sv.coins+=earned; earned=0; saveGame(); }
 }
+/* ---------- エンドレスモードのランキング(端末内保存・撃破数で上位5件) ---------- */
+function loadEndlessRank(){
+  try{ return JSON.parse(localStorage.getItem('photoInvasionEndlessRank')||'[]'); }catch(e){ return []; }
+}
+function saveEndlessRank(kills, wave){
+  const list = loadEndlessRank();
+  list.push({kills, wave});
+  list.sort((a,b)=>b.kills-a.kills);
+  const top = list.slice(0,5);
+  try{ localStorage.setItem('photoInvasionEndlessRank', JSON.stringify(top)); }catch(e){}
+  return top;
+}
 function gameOver(){
   running=false;
   controls.classList.remove('show');
@@ -1799,8 +1832,13 @@ function gameOver(){
   Snd.stopMusic(); Snd.sfx.gameOver();
   if(mode==='endless'){
     const weaponsGot = (endlessMain.length-1)+(endlessSub.length-1);
+    const rankList = saveEndlessRank(kills, wave);
+    const isNewBest = rankList[0] && rankList[0].kills===kills;
     document.getElementById('overStat').innerHTML =
-      '到達 <b>WAVE '+wave+'</b><br>撃破数 <b>'+kills+'</b><br>入手武器 <b>'+weaponsGot+'</b> 種';
+      '到達 <b>WAVE '+wave+'</b><br>撃破数 <b>'+kills+'</b><br>入手武器 <b>'+weaponsGot+'</b> 種'+
+      (isNewBest?'<br><span style="color:#ffd94a;">🏆自己ベスト更新!</span>':'')+
+      '<br><span style="font-size:13px;color:#8fa5c4;">ランキング: '+
+      rankList.map((r,i)=>(i+1)+'位 '+r.kills+'体(WAVE'+r.wave+')').join(' ／ ')+'</span>';
   } else {
     document.getElementById('overStat').innerHTML =
       'STAGE '+stage+'<br>撃破数 <b>'+kills+'</b><br>獲得コイン <b>$'+_lastEarned+'</b>'+
