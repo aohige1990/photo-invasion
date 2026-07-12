@@ -1184,10 +1184,11 @@ let player, enemies, bullets, deaths, particles, floats, rings, beams, swings, b
 let kills, earned, wave, spawnT, time, shake;
 let bossSpeech=null, bossPos=null, bossDefeatDelay=0;
 
-/* エンドレス専用の武器所持状態(コイン不要・撃破数に応じて自動解放。ステージモードの
+/* エンドレス専用の武器所持状態(コイン不要・ボスを倒すと自動解放。ステージモードの
    購入済みデータ sv.main / sv.sub とは完全に切り離して管理する) */
 let endlessMain=['handgun'], endlessSub=['punch'];
 let endlessEqMain='handgun', endlessEqSub='punch';
+let endlessBossPending=null;   // ボスを倒したら渡す武器(ENDLESS_UNLOCKSのエントリ)
 const ENDLESS_UNLOCKS = [
   {wave:2, type:'main', id:'gatling'},
   {wave:3, type:'sub',  id:'knife'},
@@ -1199,8 +1200,7 @@ const ENDLESS_UNLOCKS = [
   {wave:9, type:'sub',  id:'barrier'},
   {wave:10,type:'main', id:'rail'},
 ];
-function grantEndlessUnlock(w){
-  const entry = ENDLESS_UNLOCKS.find(u=>u.wave===w);
+function grantEndlessUnlock(entry){
   if(!entry) return;
   const def = (entry.type==='main' ? MAINS : SUBS).find(x=>x.id===entry.id);
   if(!def) return;
@@ -1214,14 +1214,24 @@ function grantEndlessUnlock(w){
   addFloat(W/2, 160, '武器入手: '+def.name+' !', '#8fd2ff');
   Snd.sfx.levelup();
   vibrate([40,40,80]);
-  if(entry.type==='main' && WEAPON_MINIGAME[entry.id]){
-    paused = true;
-    triggerWeaponMinigame(entry.id, 'endless');
-  }
 }
 
 function isMainOwned(id){ return mode==='endless' ? endlessMain.includes(id) : !!(sv.main[id] && sv.main[id].own); }
 function isSubOwned(id){ return mode==='endless' ? endlessSub.includes(id)  : !!(sv.sub[id]  && sv.sub[id].own); }
+// 現在のWAVEですでに解放条件を満たしているのに未入手の武器があればボスを出現させる
+function tryTriggerEndlessBoss(){
+  if(endlessBossPending) return;
+  const entry = ENDLESS_UNLOCKS.find(u=>{
+    if(wave < u.wave) return false;
+    return u.type==='main' ? !endlessMain.includes(u.id) : !endlessSub.includes(u.id);
+  });
+  if(entry){
+    endlessBossPending = entry;
+    spawnEnemy(true);
+    const def=(entry.type==='main'?MAINS:SUBS).find(x=>x.id===entry.id);
+    addFloat(W/2,150,'ボス出現!倒すと'+(def?def.name:'新武器')+'を入手','#ff5a4a');
+  }
+}
 
 function curMain(){ return MAINS.find(m=>m.id===(mode==='endless'?endlessEqMain:sv.eqMain)); }
 function curSub(){ return SUBS.find(s=>s.id===(mode==='endless'?endlessEqSub:sv.eqSub)); }
@@ -1253,6 +1263,7 @@ function startGame(m, st){
   bossSpeech=null;bossPos=null;bossDefeatDelay=0;
   endlessMain=['handgun']; endlessSub=['punch'];
   endlessEqMain='handgun'; endlessEqSub='punch';
+  endlessBossPending=null;
   if(mode==='stage'){
     stageTarget = (stage%5===0) ? 0 : 8 + stage*3;   // 5の倍数はボス戦
     spawnT=50;
@@ -1280,7 +1291,8 @@ function spawnEnemy(boss){
   const side=Math.random()<.5?-1:1;
   let hp, spd, scale, touch;
   if(boss){
-    hp = 50 + stage*12; spd=.7; scale=BS; touch=2;
+    hp = mode==='endless' ? 50 + wave*16 : 50 + stage*12;
+    spd=.7; scale=BS; touch=2;
   } else if(mode==='stage'){
     hp = 2 + Math.floor(stage*.9); spd=.8+Math.random()*.6+Math.min(stage*.06,1.4); scale=ES; touch=1;
   } else {
@@ -1404,9 +1416,17 @@ function killEnemy(e, deathType, hitDir){
   deaths.push(d);
   if(!e.boss) burst(e.x,e.y-50*e.scale,'#a06bc9',8);
   // 進行管理
-  if(mode==='endless' && kills%10===0){
-    wave++; addFloat(W/2,120,'WAVE '+wave+' !','#5be36b');
-    grantEndlessUnlock(wave);
+  if(mode==='endless'){
+    if(e.boss){
+      // エンドレスのボスを倒すと、保留していた武器を入手
+      sayBoss('defeat',180); bossPos={x:e.x,y:e.y};
+      Snd.sfx.bossHit();
+      if(endlessBossPending){ grantEndlessUnlock(endlessBossPending); endlessBossPending=null; }
+      tryTriggerEndlessBoss();   // WAVEが先に進んでいた場合は続けて次のボスを出す
+    } else {
+      if(kills%10===0){ wave++; addFloat(W/2,120,'WAVE '+wave+' !','#5be36b'); }
+      tryTriggerEndlessBoss();
+    }
   }
   if(mode==='stage'){
     stageKills++;
