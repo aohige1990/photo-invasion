@@ -2,7 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- ホーム画面に追加した時に全画面(standalone)で起動する。iPhoneはFullscreen APIが使えないため、これが唯一の全画面手段。 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="フォトインベージョン">
+<meta name="theme-color" content="#1c2a3d">
 <title>フォトインベージョン</title>
 <style>
   :root{
@@ -123,6 +129,11 @@
     border-radius:18px;padding:16px 26px;display:flex;flex-direction:column;align-items:center;gap:10px;
     box-shadow:0 8px 22px rgba(0,0,0,.55);}
   #ovPause .pause-card h2{font-size:22px;color:var(--ui);margin:0;}
+  #ovFsHelp{z-index:70;}
+  #ovFsHelp .pause-card{background:rgba(15,24,38,.97);border:2px solid #3d5270;
+    border-radius:18px;padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:10px;
+    box-shadow:0 8px 22px rgba(0,0,0,.55);max-height:88vh;overflow-y:auto;}
+  #ovFsHelp .pause-card h2{font-size:19px;color:var(--ui);margin:0;text-align:center;}
   #ovWeaponSelect{background:rgba(6,10,18,.55);justify-content:flex-start;padding-top:5vh;}
   #ovWeaponSelect .pause-card{pointer-events:auto;background:rgba(15,24,38,.96);border:2px solid #3d5270;
     border-radius:18px;padding:16px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;
@@ -167,6 +178,23 @@
   #cutCanvas{position:absolute;left:0;top:0;transform-origin:0 0;image-rendering:auto;}
   #cutPrevWrap{display:flex;flex-direction:column;align-items:center;gap:2px;}
   #cutPreview{background:#2c3e57;border-radius:8px;border:1px solid #3d5270;}
+
+  /* 説明書 */
+  #manualBody{width:min(680px,94vw);flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    text-align:left;background:#16233a;border:2px solid #2e4260;border-radius:14px;
+    padding:14px 16px;margin-bottom:10px;}
+  #manualBody h3{color:var(--ui);font-size:16px;margin:18px 0 6px;
+    border-bottom:1px solid #3d5270;padding-bottom:4px;}
+  #manualBody h3:first-child{margin-top:0;}
+  #manualBody p{color:#c9d8ec;font-size:13px;line-height:1.75;margin:6px 0;}
+  #manualBody ul,#manualBody ol{color:#c9d8ec;font-size:13px;line-height:1.75;
+    margin:6px 0;padding-left:1.3em;}
+  #manualBody li{margin:3px 0;}
+  #manualBody b{color:#fff;}
+  #manualBody .mnote{background:#1c3a28;border-left:3px solid var(--green);
+    padding:8px 10px;border-radius:0 8px 8px 0;font-size:12px;}
+  #manualBody .mwarn{background:#3a2418;border-left:3px solid #ff8a3a;
+    padding:8px 10px;border-radius:0 8px 8px 0;font-size:12px;}
   #ovPause.hide-ui{display:none;}
   #showUiTab{position:fixed;top:10px;left:10px;z-index:31;display:none;
     background:rgba(15,24,38,.85);color:#dbe6f5;border:1px solid #3d5270;border-radius:10px;
@@ -189,8 +217,160 @@
   <button class="btn sub" id="goSetup">キャラ設定</button>
   <button class="btn sub" id="goBackup">データのバックアップ</button>
   <button class="btn sub" id="goMgList">ミニゲーム</button>
+  <button class="btn sub" id="goManual">🔰 説明書</button>
   <button class="btn sub" id="muteBtnTitle">🔊 サウンドON</button>
   <p class="hint" id="titleInfo"></p>
+</div>
+
+<!-- iPhone向け全画面の案内 -->
+<div class="overlay" id="ovFsHelp">
+  <div class="pause-card" style="max-width:min(460px,92vw);text-align:left;">
+    <h2>この端末では全画面にできません</h2>
+    <p class="hint" style="text-align:left;line-height:1.7;">
+      iPhoneは本体側の制限で、ブラウザから全画面にする機能が使えません(Safari・Chromeなどブラウザを変えても同じです)。<br><br>
+      かわりに<b style="color:#ffd94a;">ホーム画面に追加</b>すると、アドレスバーのない全画面で遊べます。<br><br>
+      <b>やり方(Safariの場合)</b><br>
+      1. 画面下の「共有」ボタン(□に↑のマーク)を押す<br>
+      2. 「ホーム画面に追加」を選ぶ<br>
+      3. 「追加」を押す<br>
+      4. ホーム画面にできたアイコンから起動する<br><br>
+      起動したあと端末を横向きにすると、いちばん広く表示されます。
+    </p>
+    <button class="btn" id="fsHelpClose">閉じる</button>
+  </div>
+</div>
+
+<!-- 説明書 -->
+<div class="screen" id="scrManual" style="z-index:45;justify-content:flex-start;padding-top:2vh;">
+  <h1 style="font-size:clamp(20px,5vw,28px);">🔰 説明書</h1>
+  <div id="manualBody">
+
+    <h3>このゲームは?</h3>
+    <p>好きな写真を主人公や敵の顔にはめこんで遊べる、横スクロールのシューティングゲームです。写真はあなたの端末の中だけで処理され、インターネットに送られることはありません。</p>
+
+    <h3>まず操作を覚えよう</h3>
+    <ul>
+      <li><b>◀ ▶</b> … 左右に歩く</li>
+      <li><b>ショット</b> … メイン武器を撃つ(押しっぱなしで連射)</li>
+      <li><b>サブ</b> … サブ武器を使う(パンチや刀など)</li>
+      <li><b>武器切替</b> … 持っている武器を持ちかえる</li>
+      <li>画面右上の <b>II</b> で一時停止、<b>🔊</b> で音のオンオフ</li>
+      <li>ハートが体力です。敵にぶつかると減り、0になるとゲームオーバーです</li>
+    </ul>
+
+    <h3>🎮 ステージモード</h3>
+    <p>STAGE 1から順番に進んでいく、このゲームのメインモードです。</p>
+    <ul>
+      <li>決められた数の敵を倒すとステージクリアです(画面右上に「3/20」のように出ます)</li>
+      <li><b>5の倍数のステージ(5、10、15…)はボス戦</b>です。大きな敵が1体だけ出てくるので、倒せばクリアです</li>
+      <li>敵を倒すと<b>コイン($)</b>がもらえます。コインはショップで武器を買うのに使います</li>
+      <li>クリアしたステージは記録されるので、次からはそこから始められます</li>
+      <li>やられてしまっても、そのステージでためたコインはもらえます。何回でも挑戦できます</li>
+    </ul>
+
+    <h3>♾️ エンドレス</h3>
+    <p>倒れるまでひたすら敵と戦い続けるモードです。<b>どこまで倒せるかの記録に挑戦</b>します。</p>
+    <ul>
+      <li>コインはもらえません。ステージモードで買った武器も使えません</li>
+      <li>かわりに<b>ハンドガンとパンチだけの状態からスタート</b>し、遊びながら武器が増えていきます</li>
+      <li>敵を10体倒すごとにWAVEが1つ進みます</li>
+      <li>ときどき<b>ボスが出てきます。倒すと新しい武器がもらえます</b>(ガトリングガン→ナイフ→ショットガン…の順)</li>
+      <li>すべての武器がそろったあとも、5WAVEごとに「強敵」が出てきます</li>
+      <li>倒された時の撃破数が<b>ランキング</b>に残ります(上位5件)</li>
+    </ul>
+
+    <h3>🛒 ショップ</h3>
+    <p>ステージモードでためたコインで武器を買ったり強くしたりする場所です。</p>
+    <ul>
+      <li><b>メイン</b>と<b>サブ</b>の2種類のタブがあります</li>
+      <li>武器は<b>安い順に解放</b>されます。今の武器をレベル5まで上げると、次の武器が買えるようになります</li>
+      <li>買った武器は<b>レベルアップ</b>できます。1レベルごとに威力が25%上がり、最大レベル5です</li>
+      <li><b>装備</b>ボタンを押すと、その武器を使うようになります</li>
+      <li>メイン武器を<b>はじめて買った時だけミニゲーム</b>が始まります(ボーナスコインがもらえます)</li>
+    </ul>
+    <p class="mnote">メイン武器の順番: ハンドガン → ガトリングガン → ショットガン → ロケットランチャー → ビームガン → レールガン</p>
+
+    <h3>📷 キャラ設定と切り抜き方</h3>
+    <p>写真をキャラクターにはめこむ画面です。主人公・敵エイリアン①②③・ボス・ミニゲーム用キャラ①〜⑥を設定できます。</p>
+    <p><b>2つのモードがあります</b></p>
+    <ul>
+      <li><b>顔はめ込み</b> … 写真の真ん中を丸く切りぬいて、キャラの頭にはめます。体はゲームのイラストのままです。かんたんなのでこちらがおすすめです</li>
+      <li><b>全身画像</b> … 写真そのものがキャラになります。選ぶと<b>背景の切り抜き画面</b>が開きます</li>
+    </ul>
+    <p><b>背景の切り抜きのやり方</b></p>
+    <ol>
+      <li>「全身画像」を選んでから「画像フォルダから選ぶ」で写真を選びます</li>
+      <li>切り抜き画面が開いたら、<b>消したい背景の部分を指でタップ</b>します。タップした色とつながっている似た色が消えます</li>
+      <li>消えかたが足りない時は<b>「削除の強さ」</b>を右に動かして、もう一度タップします(強くしすぎると人物まで消えるので少しずつ)</li>
+      <li>すみに残った背景は<b>「消しゴム」</b>でなぞって消します</li>
+      <li>消しすぎたら<b>「復元」</b>でなぞると元に戻ります</li>
+      <li><b>「移動」</b>にすると、指1本で動かす・指2本で拡大縮小ができます。細かい所を消す時に便利です</li>
+      <li>失敗したら<b>「元に戻す」</b>、全部やり直すなら<b>「最初から」</b>を押します</li>
+      <li>右下の小さなプレビューでゲーム内の見え方を確認できます</li>
+      <li>よければ<b>「この画像を使用」</b>を押して完了です</li>
+    </ol>
+    <p class="mnote">コツ: 背景が白い壁など、1色でシンプルな写真がいちばんキレイに切り抜けます。うしろがゴチャゴチャした写真は苦手です。市松模様(チェック柄)になっている所が「透明になった部分」です。</p>
+    <p class="mwarn">⚠️ 写真はブラウザを閉じると消えます。遊ぶたびに設定し直してください(写真だけは保存されない仕組みです)。</p>
+
+    <h3>💾 データのバックアップ</h3>
+    <p>コインや武器、どこまで進んだかを<b>文字コード</b>にして保存できます。機種変更した時や、まちがって消してしまった時に元に戻せます。</p>
+    <p><b>保存のやり方</b></p>
+    <ol>
+      <li>「最新のコードを生成」を押します</li>
+      <li>「コピーする」を押します</li>
+      <li>そのコードをLINEのメモやメールなど、自分だけが見られる所に貼り付けて保管します</li>
+    </ol>
+    <p><b>元に戻すやり方</b></p>
+    <ol>
+      <li>保管しておいたコードをコピーします</li>
+      <li>「クリップボードから貼り付け」を押します(うまくいかない時は入力らんを長押しして貼り付け)</li>
+      <li>「このコードで復元する」を押します</li>
+    </ol>
+    <p class="mwarn">⚠️ 復元すると今の進み具合は<b>上書きされて消えます</b>。先に今のコードを保存しておくと安心です。写真とミニゲームの記録はバックアップに入りません。</p>
+
+    <h3>🎯 ミニゲーム</h3>
+    <p>5種類あります。メイン武器をはじめて買うと解放され、そのあとはタイトルの「ミニゲーム」からいつでも遊べます。クリアするとボーナスコインがもらえます。</p>
+    <ul>
+      <li><b>顔ハメもぐら叩き</b>(ガトリングガンで解放) … 穴から出てきた顔を20秒間タップ。叩くほど顔がボコボコになります</li>
+      <li><b>顔ハメ神経衰弱</b>(ショットガンで解放) … 12枚のカードから同じ顔のペアを探します。45秒</li>
+      <li><b>顔ハメ福笑い</b>(ロケットランチャーで解放) … 眉・目・鼻・口をドラッグして顔を完成させます。正しい位置に近いほど高得点</li>
+      <li><b>顔ハメだるまさんがころんだ</b>(ビームガンで解放) … 「進む」を連打してゴールを目指します。ただし<b>振り向いた瞬間に押すと失敗</b>。振り向くアニメをよく見て</li>
+      <li><b>顔ハメ横スクロール</b>(レールガンで解放) … タップでジャンプして走り続け、距離をきそいます</li>
+    </ul>
+    <p><b>横スクロールのくわしいルール</b></p>
+    <ul>
+      <li><b>下の障害物(段ボール・パレット)</b> … ジャンプで飛びこえます</li>
+      <li><b>上の障害物(黄色と黒のバー)</b> … <b>ジャンプすると頭をぶつけます。ジャンプせずに走りぬけるのが正解</b>です</li>
+      <li>拾えるアイテム … 安全靴(パレットを1回防ぐ)、ヘルメット(上のバーを1回防ぐ)、台車(段ボールを3回)、フォークリフト(パレットを3回)、ハンディ端末(100m飛ぶ・レア)</li>
+      <li>持っているアイテムは画面の左はしに表示されます</li>
+    </ul>
+    <p class="mnote">それぞれのミニゲームで自己ベストが記録され、一覧に表示されます。</p>
+
+    <h3>⛶ 全画面について</h3>
+    <p>画面の右上にある <b>⛶</b> を押すと、アドレスバーが消えて画面いっぱいに広がります。もう一度押すと元に戻ります。</p>
+    <ul>
+      <li><b>Android</b> … ⛶ を押すだけでOKです。対応している端末なら自動で横向きにもなります</li>
+      <li><b>PC</b> … ⛶ を押すと全画面になります</li>
+      <li><b>iPhone</b> … 残念ながらiPhone本体の仕様で、ブラウザから全画面にすることが<b>できません</b>(Safariでも、Chromeなど他のブラウザに変えても同じです)</li>
+    </ul>
+    <p><b>iPhoneで全画面にしたい場合</b></p>
+    <ol>
+      <li>Safariでこのゲームを開きます</li>
+      <li>画面下の「共有」ボタン(□に↑のマーク)を押します</li>
+      <li>「ホーム画面に追加」を選んで「追加」を押します</li>
+      <li>ホーム画面にできたアイコンから起動すると、アドレスバーのない全画面で遊べます</li>
+    </ol>
+    <p class="mnote">横向きにするともっと広く遊べます。端末の「画面の向きのロック」がオンだと横向きにならないので、その時はロックを解除してください。</p>
+
+    <h3>困った時は</h3>
+    <ul>
+      <li><b>写真が消えた</b> … ブラウザを閉じると写真は消える仕組みです。もう一度設定してください</li>
+      <li><b>画面が古いまま</b> … ページを下に引っぱって更新するか、ブラウザのキャッシュを消してください</li>
+      <li><b>コードで復元できない</b> … コードの一部が欠けていることが多いです。アプリの「コピーする」ボタンでコピーしたものを使ってください</li>
+    </ul>
+
+  </div>
+  <button class="btn" id="manualBack">タイトルへ戻る</button>
 </div>
 
 <!-- ミニゲーム一覧 -->
@@ -536,11 +716,31 @@ addEventListener('resize', fitCanvas); fitCanvas();
 
 /* ================= 全画面表示 ================= */
 function isFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement; }
+// iPhoneはOS側の制限でFullscreen APIが使えない(Safari/Chrome等どのブラウザでも不可)
+function fullscreenSupported(){
+  const el=document.documentElement;
+  return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+}
+function isStandalone(){
+  return window.navigator.standalone === true ||
+         (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
 function toggleFullscreen(){
+  if(!fullscreenSupported()){
+    if(isStandalone()){
+      alert('すでに全画面で起動しています。端末を横向きにすると広く表示されます。');
+    } else {
+      showFsHelp();
+    }
+    return;
+  }
   const el = document.documentElement;
   if(!isFullscreen()){
     const req = el.requestFullscreen || el.webkitRequestFullscreen;
-    if(req) req.call(el).catch(()=>{});
+    if(req){
+      const p = req.call(el);
+      if(p && p.catch) p.catch(()=>{ showFsHelp(); });
+    }
     // スマホでは横向きに固定できると見やすい(対応端末のみ)
     if(screen.orientation && screen.orientation.lock){ screen.orientation.lock('landscape').catch(()=>{}); }
   } else {
@@ -549,6 +749,8 @@ function toggleFullscreen(){
     if(screen.orientation && screen.orientation.unlock){ try{screen.orientation.unlock();}catch(e){} }
   }
 }
+function showFsHelp(){ document.getElementById('ovFsHelp').classList.add('show'); }
+document.getElementById('fsHelpClose').onclick=()=>{ document.getElementById('ovFsHelp').classList.remove('show'); };
 document.getElementById('fullscreenBtn').onclick = toggleFullscreen;
 document.addEventListener('fullscreenchange', ()=>{ fitCanvas(); setTimeout(()=>{fitCanvas();fitMiniCanvas();},120); });
 document.addEventListener('webkitfullscreenchange', ()=>{ fitCanvas(); setTimeout(()=>{fitCanvas();fitMiniCanvas();},120); });
@@ -2369,6 +2571,17 @@ function renderMgList(){
   });
 }
 document.getElementById('goMgList').onclick=()=>{ scrTitle.classList.remove('show'); scrMgList.classList.add('show'); renderMgList(); };
+document.getElementById('goManual').onclick=()=>{
+  scrTitle.classList.remove('show');
+  document.getElementById('scrManual').classList.add('show');
+  document.getElementById('manualBody').scrollTop=0;
+  Snd.sfx.tap();
+};
+document.getElementById('manualBack').onclick=()=>{
+  document.getElementById('scrManual').classList.remove('show');
+  scrTitle.classList.add('show');
+  Snd.sfx.tap();
+};
 document.getElementById('mgListBack').onclick=()=>{ scrMgList.classList.remove('show'); scrTitle.classList.add('show'); };
 
 /* ---------- 武器獲得によるミニゲーム起動(ショップ購入 / エンドレス自動解放) ---------- */
