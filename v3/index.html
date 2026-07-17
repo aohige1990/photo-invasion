@@ -121,6 +121,13 @@
   .shop-tab{flex:1;background:#233650;color:#8fa5c4;border:2px solid #3d5270;border-radius:10px;
     padding:9px 4px;font-size:13px;font-weight:bold;cursor:pointer;}
   .shop-tab.on{background:var(--ui);color:#3a2c00;border-color:var(--ui);}
+  .set-block{background:#1b2b44;border:2px solid #34496b;border-radius:14px;
+    padding:14px;display:flex;flex-direction:column;gap:8px;width:min(400px,92vw);align-items:center;}
+  .set-label{font-size:13px;font-weight:bold;color:var(--ui);}
+  .set-row{display:flex;gap:6px;width:100%;}
+  .set-btn{flex:1;background:#233650;color:#8fa5c4;border:2px solid #3d5270;border-radius:10px;
+    padding:10px 4px;font-size:12px;font-weight:bold;cursor:pointer;}
+  .set-btn.on{background:var(--green);color:#08240f;border-color:var(--green);}
 
   /* 写真設定 */
   .photo-card{background:#1b2b44;border:2px solid #34496b;border-radius:14px;
@@ -198,6 +205,7 @@
   <button class="btn" id="goStages">ステージ選択</button>
   <button class="btn sub" id="goShop">ショップ</button>
   <button class="btn sub" id="goPhoto">写真設定</button>
+  <button class="btn sub" id="goSettings">設定</button>
   <p class="hint" id="titleInfo"></p>
   <p class="hint" style="color:#ff8a3a;">開発中の新バージョンです<br>今のゲームは <b>/photo-invasion/</b> のまま遊べます</p>
 </div>
@@ -292,6 +300,43 @@
   </div>
 </div>
 
+
+<!-- 設定 -->
+<div class="screen" id="scrSettings">
+  <h1 style="font-size:clamp(17px,4.5vw,24px);">設定</h1>
+  <div class="set-block">
+    <div class="set-label">演出の強さ</div>
+    <div class="set-row">
+      <button class="set-btn" data-fx="high">演出多め</button>
+      <button class="set-btn" data-fx="normal">標準</button>
+      <button class="set-btn" data-fx="light">軽量</button>
+    </div>
+    <p class="hint" style="font-size:11px;">軽量にすると、粒子・画面のゆれを減らして動作を軽くします。</p>
+  </div>
+  <div class="set-block">
+    <div class="set-label">サウンド</div>
+    <div class="set-row">
+      <button class="set-btn" data-snd="on">ON</button>
+      <button class="set-btn" data-snd="off">OFF</button>
+    </div>
+  </div>
+  <div class="set-block">
+    <div class="set-label">セーブデータ</div>
+    <button class="btn sub" id="resetSave" style="background:#5c2430;box-shadow:0 4px 0 #3a1620;">データを初期化する</button>
+    <p class="hint" style="font-size:11px;">コイン・武器・ステージの進行がすべて消えます。</p>
+  </div>
+  <button class="btn" id="settingsBack">タイトルへ</button>
+</div>
+
+<!-- 初期化の確認 -->
+<div class="overlay" id="ovReset">
+  <div class="card">
+    <h2 style="color:#ff5a4a;">本当に初期化しますか?</h2>
+    <p class="hint">コイン・武器・レベル・ステージ進行が<br><b style="color:#ff8a3a;">すべて消えます。</b>元に戻せません。</p>
+    <button class="btn" id="resetYes" style="background:#ff5a4a;color:#fff;box-shadow:0 4px 0 #a32a20;">初期化する</button>
+    <button class="btn sub" id="resetNo">やめる</button>
+  </div>
+</div>
 
 <!-- ポーズ -->
 <div class="overlay" id="ovPause">
@@ -2238,11 +2283,12 @@ function renderStages(){
     const band=COIN_TABLE[coinBand(st.id)];
     const est=Math.round(st.count*(band.normal[0]+band.normal[1])/2 + (st.boss?BOSSES[st.boss-1].reward:0));
     d.innerHTML =
-      '<div class="no">'+(locked?'🔒':st.id)+'</div>'+
-      (st.boss?'<div class="bosstag">BOSS</div>':'')+
+      '<div class="no">'+(locked?'🔒':st.id)+(rec?' ✓':'')+'</div>'+
+      (st.boss?'<div class="bosstag">BOSS'+(BOSSES[st.boss-1].final?'(最終)':'')+'</div>':'')+
       '<div class="rec">'+mainOf(st.rec).name+'</div>'+
       '<div class="meta">HP'+st.hp+' / 敵'+st.count+'</div>'+
       '<div class="meta">目安 $'+est.toLocaleString()+'</div>'+
+      (rec?'<div class="meta" style="color:#ffd94a;">スコア '+rec.score.toLocaleString()+'</div>':'')+
       (rec?'<div class="rank">'+rec.rank+'</div>':'');
     if(!locked) d.onclick=()=>{ SFX.tap(); startStage(st.id); };
     grid.appendChild(d);
@@ -2356,6 +2402,29 @@ function renderShop(){
 document.querySelectorAll('.shop-tab').forEach(b=>{
   b.onclick=()=>{ shopTab=b.dataset.tab; SFX.tap(); renderShop(); };
 });
+/* ================= 設定 ================= */
+function renderSettings(){
+  document.querySelectorAll('[data-fx]').forEach(b=>b.classList.toggle('on', b.dataset.fx===sv.fx));
+  document.querySelectorAll('[data-snd]').forEach(b=>b.classList.toggle('on', (b.dataset.snd==='off')===!!sv.muted));
+}
+document.querySelectorAll('[data-fx]').forEach(b=>{
+  b.onclick=()=>{ sv.fx=b.dataset.fx; save(); renderSettings(); SFX.tap(); };
+});
+document.querySelectorAll('[data-snd]').forEach(b=>{
+  b.onclick=()=>{ sv.muted = b.dataset.snd==='off'; save(); renderSettings(); SFX.tap(); };
+});
+document.getElementById('goSettings').onclick=()=>{ SFX.tap(); showScreen('scrSettings'); renderSettings(); };
+document.getElementById('settingsBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
+document.getElementById('resetSave').onclick=()=>{ document.getElementById('ovReset').classList.add('show'); };
+document.getElementById('resetNo').onclick=()=>{ document.getElementById('ovReset').classList.remove('show'); };
+document.getElementById('resetYes').onclick=()=>{
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  sv=load(); save();
+  document.getElementById('ovReset').classList.remove('show');
+  showScreen('scrTitle');
+  alert('データを初期化しました');
+};
+
 document.getElementById('goShop').onclick=()=>{ SFX.tap(); showScreen('scrShop'); renderShop(); };
 document.getElementById('shopBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
 
