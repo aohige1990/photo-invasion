@@ -178,7 +178,11 @@
   </div>
   <div id="bossBarWrap">
     <div id="bossName">BOSS</div>
-    <div id="bossBarBg"><div id="bossBar"></div></div>
+    <div id="bossBarBg"><div id="bossBar"></div>
+      <div class="bmark" style="left:70%;"></div>
+      <div class="bmark" style="left:40%;"></div>
+      <div class="bmark" style="left:20%;"></div>
+    </div>
   </div>
 </div>
 <div id="equipInfo"></div>
@@ -896,6 +900,7 @@ let running=false, paused=false, stageId=1, S=null;
 let enemies=[], bullets=[], parts=[], floats=[], fx=[];
 let gatlingRamp=0, pendingRail=0, pendingRailDmg=0;
 let subCd=0, ultGauge=0, subUses=0, ultUses=0, dots=[], sweeps=[], barrierT=0, barrierMul=1;
+let bossSpawned=false, bossDone=false, bossRef=null, bossDmgAcc=0;
 let defHp=10, defMax=10, timeLeft=60*60, waves=[], waveIdx=0, waveTimer=0;
 let spawnQueue=[], spawned=0, killed=0, leaked=0, earned=0;
 let combo=0, maxCombo=0, comboTimer=0, shots=0, hits=0, damageTaken=0;
@@ -929,6 +934,8 @@ function startStage(id){
   enemies=[]; bullets=[]; parts=[]; floats=[]; fx=[];
   gatlingRamp=0; pendingRail=0; pendingRailDmg=0;
   subCd=0; ultGauge=0; subUses=0; ultUses=0; dots=[]; sweeps=[]; barrierT=0;
+  bossSpawned=false; bossDone=false; bossRef=null; bossDmgAcc=0;
+  document.getElementById('bossBarWrap').classList.remove('show');
   defMax=defenseHp(id); defHp=defMax;
   timeLeft=60*60; waves=buildWaves(S); waveIdx=0; waveTimer=0;
   spawnQueue=waves[0].slice(); spawned=0; killed=0; leaked=0; earned=0;
@@ -961,6 +968,120 @@ function spawnEnemy(type){
     shield:!!T.shield, shieldUsed:false, dying:0 });
   spawned++;
 }
+/* ================= ボス ================= */
+function spawnBoss(){
+  const B=BOSSES[S.boss-1];
+  const spd=B.spd*(W-DEF_X)/(8*60);
+  bossRef={ type:'normal', boss:true, bossId:B.id, x:W+60, y:GROUND,
+    hp:B.hp, maxHp:B.hp, spd, baseSpd:spd, scale:1.95, walk:0, flash:0, alive:true,
+    dying:0, reward:B.reward,
+    // 行動用タイマー類
+    t:0, accelT:0, summonT:300, invincT:0, invincCd:360, chargeT:0, chargeCd:0,
+    shieldHits:(B.id===6?12:0), rage:false, phase:1, osc:0, yOff:0, areaT:300,
+    sped:false };
+  enemies.push(bossRef);
+  bossSpawned=true;
+  const nm=document.getElementById('bossName');
+  nm.textContent = (B.final?'最終ボス':'BOSS '+B.id);
+  document.getElementById('bossBarWrap').classList.add('show');
+  addFloat(W/2,150,(B.final?'最終ボス出現!!':'ボス出現!'),'#ff5a4a');
+  shake=Math.max(shake,10);
+  beep(60,0.6,'sawtooth',0.12);
+}
+function summonMinions(list){
+  for(const t of list){
+    if(enemies.filter(e=>e.alive).length >= S.cap+2) return;  // 出しすぎ防止
+    spawnEnemy(t);
+    const ee=enemies[enemies.length-1];
+    ee.x=Math.min(W+30, bossRef ? bossRef.x+40+Math.random()*40 : W+30);
+  }
+  addFloat(bossRef?bossRef.x:W-80, GROUND-150, '召喚!','#c77dff');
+}
+function updateBoss(e){
+  const B=BOSSES[e.bossId-1];
+  e.t++;
+  const hpR=e.hp/e.maxHp;
+  let sp=e.baseSpd, move=true;
+  switch(e.bossId){
+    case 1:  // ゆっくり直進、一定時間ごとに短い加速
+      if(--e.accelT<=0){ e.accelT=240; e.burst=50; }
+      if(e.burst>0){ e.burst--; sp*=2.2; }
+      break;
+    case 2:  // 左右へ小さく移動、通常敵を少数召喚
+      e.osc+=0.04; sp += Math.sin(e.osc)*e.baseSpd*0.8;
+      if(--e.summonT<=0){ e.summonT=420; summonMinions(['normal','normal']); }
+      break;
+    case 3:  // 電撃耐性(hitEnemy側)。HP50%以下で高速化
+      if(hpR<=0.5 && !e.sped){ e.sped=true; e.baseSpd*=1.5; addFloat(e.x,e.y-190,'加速!','#ff8a3a'); }
+      break;
+    case 4:  // 一定時間ごとに短時間無敵、雑魚召喚
+      if(e.invincT>0) e.invincT--;
+      else if(--e.invincCd<=0){ e.invincCd=360; e.invincT=90; addFloat(e.x,e.y-190,'無敵!','#ffd94a'); }
+      if(--e.summonT<=0){ e.summonT=420; summonMinions(['normal','fast']); }
+      break;
+    case 5:  // 左右へ大きく移動、近距離で突進
+      e.osc+=0.03; sp += Math.sin(e.osc)*e.baseSpd*1.6;
+      if(e.chargeCd>0) e.chargeCd--;
+      if(e.chargeT>0){ e.chargeT--; sp=e.baseSpd*3.2; }
+      else if(e.chargeCd<=0 && e.x<PLAYER_X+260){ e.chargeT=45; e.chargeCd=300; addFloat(e.x,e.y-190,'突進!','#ff5a4a'); }
+      break;
+    case 6:  // シールド展開、一定回数攻撃で解除(hitEnemy側で減少)
+      break;
+    case 7:  // 高速敵を召喚。HP40%以下で怒り
+      if(hpR<=0.4 && !e.rage){ e.rage=true; e.baseSpd*=1.4; addFloat(e.x,e.y-190,'怒り状態!','#ff4a4a'); }
+      if(--e.summonT<=0){ e.summonT=e.rage?240:360; summonMinions(['fast']); }
+      break;
+    case 8:  // 上下にも移動、範囲攻撃
+      e.osc+=0.035;
+      e.yOff = -Math.abs(Math.sin(e.osc))*64;
+      sp += Math.cos(e.osc*0.7)*e.baseSpd*0.9;
+      if(--e.areaT<=0){
+        e.areaT=300;
+        fx.push({kind:'ring',x:DEF_X+40,y:GROUND-60,r:70,life:16});
+        defHp=Math.max(0,defHp-1); damageTaken+=1;
+        addFloat(DEF_X+40,GROUND-140,'範囲攻撃 -1','#ff4a4a');
+        shake=Math.max(shake,6);
+        if(defHp<=0){ endStage(false); return; }
+      }
+      break;
+    case 9:  // 短時間無敵、重装と高速を召喚
+      if(e.invincT>0) e.invincT--;
+      else if(--e.invincCd<=0){ e.invincCd=300; e.invincT=70; addFloat(e.x,e.y-190,'無敵!','#ffd94a'); }
+      if(--e.summonT<=0){ e.summonT=400; summonMinions(['heavy','fast']); }
+      break;
+    case 10: // 最終ボス3段階
+      if(hpR<=0.7 && e.phase<2){ e.phase=2; addFloat(e.x,e.y-190,'左右移動開始!','#ff8a3a'); }
+      if(hpR<=0.4 && e.phase<3){ e.phase=3; e.summonT=60; addFloat(e.x,e.y-190,'召喚開始!','#c77dff'); }
+      if(hpR<=0.2 && e.phase<4){
+        e.phase=4; e.baseSpd*=1.25;
+        fx.push({kind:'gravity',life:40});
+        addFloat(W/2,170,'第二形態!!','#ff4a4a');
+        shake=Math.max(shake,12); beep(45,0.8,'sawtooth',0.13);
+      }
+      if(e.phase>=2){ e.osc+=0.035; sp += Math.sin(e.osc)*e.baseSpd*1.2; }
+      if(e.phase>=3 && --e.summonT<=0){ e.summonT=e.phase>=4?240:300; summonMinions(['fast','heavy']); }
+      if(e.phase>=4 && --e.areaT<=0){
+        e.areaT=240;
+        fx.push({kind:'ring',x:DEF_X+40,y:GROUND-60,r:70,life:16});
+        defHp=Math.max(0,defHp-1); damageTaken+=1;
+        addFloat(DEF_X+40,GROUND-140,'-1','#ff4a4a');
+        if(defHp<=0){ endStage(false); return; }
+      }
+      break;
+  }
+  if(move){
+    e.x-=Math.max(e.baseSpd*0.2, sp);
+    e.walk+=0.1;
+  }
+  // 防衛ラインに到達: 大ダメージ+ノックバック(倒すまで繰り返し攻めてくる)
+  if(e.x<=DEF_X+10){
+    defHp=Math.max(0,defHp-5); damageTaken+=5;
+    addFloat(DEF_X+30,GROUND-150,'-5','#ff4a4a');
+    shake=Math.max(shake,12); SFX.leak(); vib([80,50,80]);
+    e.x=DEF_X+190;
+    if(defHp<=0){ endStage(false); return; }
+  }
+}
 function addFloat(x,y,t,c){ floats.push({x,y,t,c,life:50}); }
 function burst(x,y,c,n){
   const q = sv.fx==='light'?Math.round(n*0.25):sv.fx==='normal'?Math.round(n*0.6):n;
@@ -969,6 +1090,18 @@ function burst(x,y,c,n){
 
 function hitEnemy(e,dmg,death){
   if(!e.alive) return;
+  // ボスの特殊防御
+  if(e.boss){
+    if(e.invincT>0){ addFloat(e.x,e.y-190,'ムテキ','#ffd94a'); return; }
+    if(e.bossId===3 && death==='shock'){ dmg*=0.7; }        // 電撃耐性
+    if(e.bossId===6 && e.shieldHits>0){                      // シールド(攻撃回数で解除)
+      e.shieldHits--; dmg*=0.15;
+      if(e.shieldHits===0) addFloat(e.x,e.y-190,'シールド解除!','#5be36b');
+    }
+    // ボスへのダメージで必殺ゲージが少しずつたまる(100ダメージごとに+5)
+    bossDmgAcc+=dmg;
+    while(bossDmgAcc>=100){ bossDmgAcc-=100; ultGauge=Math.min(999,ultGauge+5); }
+  }
   // 冷凍銃Lv5: 凍結中の敵への次の攻撃が1.5倍
   if(e.frozen>0 && e.freezeBonus){ dmg*=1.5; e.freezeBonus=false; addFloat(e.x,e.y-112,'1.5倍!','#8fd2ff'); }
   if(e.shield && !e.shieldUsed){ e.shieldUsed=true; dmg*=0.35; addFloat(e.x,e.y-90,'シールド!','#6ba3e0'); }
@@ -986,11 +1119,18 @@ function hitEnemy(e,dmg,death){
     ultGauge += (ENEMY_TYPES[e.type]||{gauge:3}).gauge;
     if(combo>0 && combo%10===0){ ultGauge+=10; addFloat(e.x,e.y-124,'ゲージ+10','#5be36b'); }
     ultGauge=Math.min(ultGauge, 999);
+    if(e.boss){
+      bossDone=true;
+      document.getElementById('bossBarWrap').classList.remove('show');
+      earned+=e.reward;
+      addFloat(e.x,e.y-160,'ボス撃破! +$'+e.reward.toLocaleString(),'#ffd94a');
+      shake=Math.max(shake,14); beep(500,0.4,'triangle',0.1); vib([60,40,60,40,120]);
+    }
     const band=COIN_TABLE[coinBand(stageId)];
     const r=band[e.type]||band.normal;
-    let coin=Math.round(r[0]+Math.random()*(r[1]-r[0]));
+    let coin=Math.round(e.boss?0:(r[0]+Math.random()*(r[1]-r[0])));
     earned+=coin;
-    addFloat(e.x,e.y-100,'+$'+coin,'#ffd94a');
+    if(!e.boss) addFloat(e.x,e.y-100,'+$'+coin,'#ffd94a');
     burst(e.x,e.y-50,TYPE_COLOR[e.type][0],10);
     SFX.kill(); vib(12);
   }
@@ -1265,6 +1405,11 @@ function update(){
     addFloat(W/2,120,'WAVE '+(waveIdx+1),'#5be36b');
     waveTimer=60;
   }
+  // 全ウェーブ後にボス出現(ボスステージのみ)
+  if(S.boss && !bossSpawned && !spawnQueue.length && waveIdx>=waves.length-1
+     && enemies.filter(e=>e.alive).length===0){
+    spawnBoss();
+  }
 
   // サブ武器の待ち時間
   if(subCd>0) subCd--;
@@ -1377,6 +1522,7 @@ function update(){
     if(e.wrapped>0) e.wrapped--;
     if(e.frozen>0){ e.frozen--; continue; }   // 凍結中は動かない
     if(e.stunT>0){ e.stunT--; continue; }     // 段ボール・フィルムで停止中
+    if(e.boss){ updateBoss(e); if(!running) return; continue; }
     const sp = e.stagger>0 ? e.spd*0.4 : e.spd;  // ふらつき中は減速
     if(e.stagger>0) e.stagger--;
     e.x-=sp; e.walk+=0.12;
@@ -1389,9 +1535,11 @@ function update(){
   floats=floats.filter(f=>{ f.y-=0.8; return --f.life>0; });
 
   // 終了判定
-  const done = !spawnQueue.length && waveIdx>=waves.length-1 && enemies.filter(e=>e.alive).length===0;
+  const noAlive = enemies.filter(e=>e.alive).length===0;
+  const done = !spawnQueue.length && waveIdx>=waves.length-1 && noAlive && (!S.boss || bossDone);
   if(done && running){ endStage(true); return; }
-  if(timeLeft<=0 && running){ endStage(defHp>0); return; }
+  // 時間切れ: ボス戦中はボスを倒せていなければ敗北扱い
+  if(timeLeft<=0 && running){ endStage(defHp>0 && (!S.boss || bossDone)); return; }
   refreshHud();
 }
 function draw(){
@@ -1421,7 +1569,31 @@ function draw(){
   // 敵
   for(const e of enemies){
     if(!e.alive){ drawDeadEnemy(e); continue; }
-    drawEnemyArt(ctx,e.x,e.y,-1,e.walk,charCfg.enemy,e.flash,e.scale,e.type);
+    const ey = e.y + (e.yOff||0);
+    drawEnemyArt(ctx,e.x,ey,-1,e.walk,charCfg.enemy,e.flash,e.scale,e.type);
+    if(e.boss){
+      // BOSSラベル
+      ctx.fillStyle='#ff5a4a'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center';
+      ctx.fillText(BOSSES[e.bossId-1].final?'最終ボス':'BOSS', e.x, ey-116*e.scale);
+      // 無敵表示
+      if(e.invincT>0){
+        ctx.strokeStyle='rgba(255,217,74,.9)'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(e.x,ey-55*e.scale,58*e.scale+Math.random()*4,0,Math.PI*2); ctx.stroke();
+      }
+      // シールド表示(ボス6)
+      if(e.shieldHits>0){
+        ctx.strokeStyle='rgba(107,163,224,.85)'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(e.x,ey-55*e.scale,52*e.scale,0,Math.PI*2); ctx.stroke();
+        ctx.fillStyle='#6ba3e0'; ctx.font='bold 11px sans-serif';
+        ctx.fillText('シールド '+e.shieldHits, e.x, ey-128*e.scale);
+      }
+      // 第二形態の赤いオーラ(最終ボス)
+      if(e.phase>=4){
+        ctx.strokeStyle='rgba(255,74,74,.6)'; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.arc(e.x,ey-55*e.scale,62*e.scale+Math.sin(performance.now()/80)*5,0,Math.PI*2); ctx.stroke();
+      }
+      continue;   // ボスの小型HPバーは出さない(上部の大バーを使う)
+    }
     // 凍結表示(氷ブロック)
     if(e.frozen>0){
       ctx.fillStyle='rgba(160,220,255,.4)';
@@ -1909,6 +2081,10 @@ function refreshHud(){
   document.getElementById('hWave').textContent='WAVE '+(waveIdx+1)+'/'+waves.length;
   document.getElementById('hLeft').textContent='残り '+(S.count-killed-leaked);
   document.getElementById('hCombo').textContent = combo>=2 ? combo+' COMBO' : '';
+  // ボスHPバー
+  if(bossSpawned && bossRef && bossRef.alive){
+    document.getElementById('bossBar').style.width=(Math.max(0,bossRef.hp/bossRef.maxHp)*100)+'%';
+  }
   // サブ武器の待ち時間
   const cs=document.getElementById('cdSub');
   if(subCd>0){ cs.classList.remove('hide'); cs.textContent=Math.ceil(subCd/60); }
@@ -1945,6 +2121,11 @@ function endStage(win){
   if(win) dayCount++;
 
   let base=0, bonusRows=[];
+  if(!win && bossSpawned && bossRef && bossRef.hp<=bossRef.maxHp*0.5){
+    const b10=Math.round(CLEAR_REWARD[stageId-1]*0.10);
+    earned+=b10;
+    bonusRows.push(['ボスHP50%以上削った(挑戦ボーナス)','+$'+b10]);
+  }
   if(win){
     const rate = first ? REPLAY_RATE.first : (dayCount>=5 ? REPLAY_RATE.farm : REPLAY_RATE.repeat);
     base = Math.round(CLEAR_REWARD[stageId-1]*rate);
@@ -1989,8 +2170,8 @@ function showResult(win,rank,score,base,bonusRows,first){
   rows.forEach(([a,b])=>html+='<div class="res-row"><span>'+a+'</span><b>'+b+'</b></div>');
   if(win && base){
     html+='<div class="res-row"><span>基本クリア報酬</span><b>$'+base+'</b></div>';
-    bonusRows.forEach(([a,b])=>html+='<div class="res-row bonus"><span>'+a+'</span><span>'+b+'</span></div>');
   }
+  bonusRows.forEach(([a,b])=>html+='<div class="res-row bonus"><span>'+a+'</span><span>'+b+'</span></div>');
   const rec=sv.cleared[stageId];
   if(win && rec && rec.score===score && rec.count===1) html+='<div class="res-row bonus"><span>🏆 ハイスコア</span><span>NEW</span></div>';
   document.getElementById('resRows').innerHTML=html;
