@@ -310,18 +310,18 @@ const MAINS = [
   { id:'rail', name:'レールガン', order:10, basePrice:4000, unlockPrice:148000,
     dmg:[110,127,149,176,209], rate:[0.45,0.49,0.53,0.59,0.65], death:'rail' },
 ];
+/* 敵は「通常(=旧・集団を統合)」「高速(=旧・シールドを統合)」「重装(=旧・エリートを統合)」の
+   3種類に、ボス・主人公を合わせた5種類の見た目で構成する。
+   統合後の数値は、統合前の2種類の単純平均を基本にしている。 */
 const ENEMY_TYPES = {
-  normal:{ name:'通常敵', hp:1.00,spd:1.00,coin:1.00,size:1.00,dmg:1,gauge:3 },
-  fast:  { name:'高速敵', hp:0.65,spd:1.45,coin:0.80,size:0.80,dmg:1,gauge:2 },
-  heavy: { name:'重装敵', hp:2.20,spd:0.65,coin:1.80,size:1.30,dmg:3,gauge:6 },
-  swarm: { name:'集団敵', hp:0.75,spd:0.95,coin:0.75,size:0.90,dmg:1,gauge:3 },
-  shield:{ name:'シールド敵',hp:1.50,spd:0.80,coin:1.60,size:1.05,dmg:2,gauge:5,shield:true },
-  elite: { name:'エリート敵',hp:3.50,spd:0.90,coin:3.00,size:1.20,dmg:5,gauge:12 },
+  normal:{ name:'通常敵', hp:0.90,spd:1.00,coin:0.90,size:0.95,dmg:1,gauge:3 },
+  fast:  { name:'高速敵', hp:1.05,spd:1.10,coin:1.20,size:0.90,dmg:2,gauge:4,shield:true },
+  heavy: { name:'重装敵', hp:2.85,spd:0.78,coin:2.40,size:1.25,dmg:4,gauge:9 },
 };
 const COIN_TABLE = {
-  early:{ normal:[40,60], fast:[30,50], heavy:[80,120], shield:[70,110], elite:[250,400] },
-  mid:  { normal:[80,140],fast:[65,110],heavy:[170,280],shield:[150,250],elite:[500,900] },
-  late: { normal:[160,260],fast:[130,210],heavy:[320,500],shield:[280,450],elite:[1000,1700] },
+  early:{ normal:[40,60],  fast:[50,80],   heavy:[165,260] },
+  mid:  { normal:[80,140], fast:[108,180], heavy:[335,590] },
+  late: { normal:[160,260],fast:[205,330], heavy:[660,1100] },
 };
 const coinBand = s => s<=10 ? 'early' : s<=20 ? 'mid' : 'late';
 const BOSSES = [
@@ -335,33 +335,33 @@ const STAGES = [
   {id:1,rec:'handgun',hp:16,spd:0.85,count:18,cap:3,comp:{normal:18}},
   {id:2,rec:'handgun',hp:22,spd:0.92,count:24,cap:4,comp:{normal:18,fast:6}},
   {id:3,rec:'handgun',hp:28,spd:1.00,count:28,cap:4,comp:{normal:20,fast:8},boss:1},
-  {id:4,rec:'sonic',hp:24,spd:0.95,count:22,cap:4,comp:{normal:16,swarm:6}},
-  {id:5,rec:'sonic',hp:30,spd:1.00,count:28,cap:5,comp:{normal:16,fast:6,swarm:6}},
-  {id:6,rec:'sonic',hp:36,spd:1.05,count:34,cap:5,comp:{normal:20,fast:8,heavy:4,elite:2},boss:2},
-  {id:7,rec:'shock',hp:30,spd:1.00,count:26,cap:5,comp:{normal:16,swarm:8,heavy:2}},
-  {id:8,rec:'shock',hp:38,spd:1.06,count:32,cap:5,comp:{normal:14,fast:8,swarm:6,shield:4}},
-  {id:9,rec:'shock',hp:45,spd:1.12,count:38,cap:5,comp:{normal:18,fast:8,heavy:4,shield:4,elite:4},boss:3},
-  {id:10,rec:'freeze',hp:36,spd:1.05,count:28,cap:5,comp:{normal:14,fast:8,heavy:4,shield:2}},
-  {id:11,rec:'freeze',hp:45,spd:1.11,count:35,cap:6,comp:{normal:15,fast:8,swarm:6,heavy:4,shield:2}},
-  {id:12,rec:'freeze',hp:54,spd:1.18,count:42,cap:6,comp:{normal:18,fast:10,swarm:6,heavy:4,shield:2,elite:2},boss:4},
-  {id:13,rec:'shotgun',hp:44,spd:1.10,count:30,cap:6,comp:{normal:14,fast:8,swarm:8}},
-  {id:14,rec:'shotgun',hp:55,spd:1.18,count:38,cap:6,comp:{normal:14,fast:8,swarm:8,heavy:4,shield:4}},
-  {id:15,rec:'shotgun',hp:66,spd:1.25,count:46,cap:6,comp:{normal:18,fast:10,swarm:8,heavy:4,shield:4,elite:2},boss:5},
-  {id:16,rec:'beam',hp:52,spd:1.18,count:34,cap:6,comp:{normal:14,fast:8,swarm:8,shield:4}},
-  {id:17,rec:'beam',hp:65,spd:1.25,count:42,cap:7,comp:{normal:14,fast:10,swarm:8,heavy:4,shield:4,elite:2}},
-  {id:18,rec:'beam',hp:78,spd:1.32,count:50,cap:8,comp:{normal:18,fast:10,swarm:8,heavy:6,shield:4,elite:4},boss:6},
-  {id:19,rec:'gatling',hp:60,spd:1.25,count:40,cap:7,comp:{normal:12,fast:14,swarm:10,shield:4}},
-  {id:20,rec:'gatling',hp:75,spd:1.32,count:50,cap:8,comp:{normal:14,fast:14,swarm:10,heavy:4,shield:4,elite:4}},
-  {id:21,rec:'gatling',hp:90,spd:1.40,count:60,cap:8,comp:{normal:18,fast:16,swarm:10,heavy:6,shield:6,elite:4},boss:7},
-  {id:22,rec:'plasma',hp:72,spd:1.32,count:42,cap:8,comp:{normal:12,fast:10,swarm:10,heavy:4,shield:4,elite:2}},
-  {id:23,rec:'plasma',hp:88,spd:1.40,count:52,cap:9,comp:{normal:14,fast:12,swarm:10,heavy:6,shield:6,elite:4}},
-  {id:24,rec:'plasma',hp:105,spd:1.48,count:62,cap:9,comp:{normal:18,fast:14,swarm:10,heavy:8,shield:6,elite:6},boss:8},
-  {id:25,rec:'grenade',hp:85,spd:1.40,count:45,cap:8,comp:{normal:12,fast:10,swarm:10,heavy:5,shield:4,elite:4}},
-  {id:26,rec:'grenade',hp:105,spd:1.49,count:56,cap:9,comp:{normal:14,fast:12,swarm:10,heavy:8,shield:6,elite:6}},
-  {id:27,rec:'grenade',hp:125,spd:1.58,count:66,cap:9,comp:{normal:18,fast:14,swarm:10,heavy:8,shield:8,elite:8},boss:9},
-  {id:28,rec:'rail',hp:100,spd:1.48,count:48,cap:9,comp:{normal:10,fast:14,swarm:10,heavy:6,shield:4,elite:4}},
-  {id:29,rec:'rail',hp:125,spd:1.59,count:60,cap:10,comp:{normal:14,fast:14,swarm:10,heavy:8,shield:6,elite:8}},
-  {id:30,rec:'rail',hp:150,spd:1.70,count:72,cap:10,comp:{normal:18,fast:16,swarm:10,heavy:10,shield:8,elite:10},boss:10},
+  {id:4,rec:'sonic',hp:24,spd:0.95,count:22,cap:4,comp:{normal:22}},
+  {id:5,rec:'sonic',hp:30,spd:1.00,count:28,cap:5,comp:{normal:22,fast:6}},
+  {id:6,rec:'sonic',hp:36,spd:1.05,count:34,cap:5,comp:{normal:20,fast:8,heavy:6},boss:2},
+  {id:7,rec:'shock',hp:30,spd:1.00,count:26,cap:5,comp:{normal:24,heavy:2}},
+  {id:8,rec:'shock',hp:38,spd:1.06,count:32,cap:5,comp:{normal:20,fast:12}},
+  {id:9,rec:'shock',hp:45,spd:1.12,count:38,cap:5,comp:{normal:18,fast:12,heavy:8},boss:3},
+  {id:10,rec:'freeze',hp:36,spd:1.05,count:28,cap:5,comp:{normal:14,fast:10,heavy:4}},
+  {id:11,rec:'freeze',hp:45,spd:1.11,count:35,cap:6,comp:{normal:21,fast:10,heavy:4}},
+  {id:12,rec:'freeze',hp:54,spd:1.18,count:42,cap:6,comp:{normal:24,fast:12,heavy:6},boss:4},
+  {id:13,rec:'shotgun',hp:44,spd:1.10,count:30,cap:6,comp:{normal:22,fast:8}},
+  {id:14,rec:'shotgun',hp:55,spd:1.18,count:38,cap:6,comp:{normal:22,fast:12,heavy:4}},
+  {id:15,rec:'shotgun',hp:66,spd:1.25,count:46,cap:6,comp:{normal:26,fast:14,heavy:6},boss:5},
+  {id:16,rec:'beam',hp:52,spd:1.18,count:34,cap:6,comp:{normal:22,fast:12}},
+  {id:17,rec:'beam',hp:65,spd:1.25,count:42,cap:7,comp:{normal:22,fast:14,heavy:6}},
+  {id:18,rec:'beam',hp:78,spd:1.32,count:50,cap:8,comp:{normal:26,fast:14,heavy:10},boss:6},
+  {id:19,rec:'gatling',hp:60,spd:1.25,count:40,cap:7,comp:{normal:22,fast:18}},
+  {id:20,rec:'gatling',hp:75,spd:1.32,count:50,cap:8,comp:{normal:24,fast:18,heavy:8}},
+  {id:21,rec:'gatling',hp:90,spd:1.40,count:60,cap:8,comp:{normal:28,fast:22,heavy:10},boss:7},
+  {id:22,rec:'plasma',hp:72,spd:1.32,count:42,cap:8,comp:{normal:22,fast:14,heavy:6}},
+  {id:23,rec:'plasma',hp:88,spd:1.40,count:52,cap:9,comp:{normal:24,fast:18,heavy:10}},
+  {id:24,rec:'plasma',hp:105,spd:1.48,count:62,cap:9,comp:{normal:28,fast:20,heavy:14},boss:8},
+  {id:25,rec:'grenade',hp:85,spd:1.40,count:45,cap:8,comp:{normal:22,fast:14,heavy:9}},
+  {id:26,rec:'grenade',hp:105,spd:1.49,count:56,cap:9,comp:{normal:24,fast:18,heavy:14}},
+  {id:27,rec:'grenade',hp:125,spd:1.58,count:66,cap:9,comp:{normal:28,fast:22,heavy:16},boss:9},
+  {id:28,rec:'rail',hp:100,spd:1.48,count:48,cap:9,comp:{normal:20,fast:18,heavy:10}},
+  {id:29,rec:'rail',hp:125,spd:1.59,count:60,cap:10,comp:{normal:24,fast:20,heavy:16}},
+  {id:30,rec:'rail',hp:150,spd:1.70,count:72,cap:10,comp:{normal:28,fast:24,heavy:20},boss:10},
 ];
 const CLEAR_REWARD=[1200,1400,1800,1800,2000,2600,2300,2600,3200,1400,1600,2000,
   1900,2200,2600,2400,2800,3400,900,1000,1200,700,800,900,600,700,800,500,600,700];
@@ -698,9 +698,8 @@ function drawCircleImage(g,img,cx,cy,r){
   g.drawImage(img,cx-r,cy-r,r*2,r*2); g.restore();
   g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.55)'; g.stroke();
 }
-const TYPE_COLOR={ normal:['#a06bc9','#6e4691'], fast:['#5bc8af','#2f8a76'],
-  heavy:['#c97d3a','#8a4f1c'], swarm:['#8fa5c4','#5c7292'],
-  shield:['#6ba3e0','#3a6da8'], elite:['#e06b9a','#a13a65'] };
+const TYPE_COLOR={ normal:['#a06bc9','#6e4691'], fast:['#6ba3e0','#3a6da8'],
+  heavy:['#c97d3a','#8a4f1c'] };
 function drawEnemyArt(g,footX,footY,dir,walk,cfg,flash,scale,type){
   const [bodyC,darkC]=TYPE_COLOR[type]||TYPE_COLOR.normal;
   scale=scale||1;
@@ -801,7 +800,7 @@ function buildWaves(st){
   const pool=[];
   for(const [type,cnt] of Object.entries(st.comp)) for(let i=0;i<cnt;i++) pool.push(type);
   // 強い敵が後半に寄るよう並べ替え
-  const rank={swarm:0,normal:1,fast:2,shield:3,heavy:4,elite:5};
+  const rank={normal:0,fast:1,heavy:2};
   pool.sort((a,b)=>rank[a]-rank[b]);
   const out=Array.from({length:n},()=>[]);
   pool.forEach((t,i)=>{ out[Math.min(n-1, Math.floor(i/pool.length*n))].push(t); });
@@ -858,9 +857,8 @@ function hitEnemy(e,dmg){
     killed++; combo++; comboTimer=150; maxCombo=Math.max(maxCombo,combo);
     const T=ENEMY_TYPES[e.type];
     const band=COIN_TABLE[coinBand(stageId)];
-    const key = e.type==='swarm'?'normal':e.type;
-    const r=band[key]||band.normal;
-    let coin=Math.round((r[0]+Math.random()*(r[1]-r[0])) * (e.type==='swarm'?0.75:1));
+    const r=band[e.type]||band.normal;
+    let coin=Math.round(r[0]+Math.random()*(r[1]-r[0]));
     earned+=coin;
     addFloat(e.x,e.y-100,'+$'+coin,'#ffd94a');
     burst(e.x,e.y-50,TYPE_COLOR[e.type][0],10);
