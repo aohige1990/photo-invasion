@@ -101,6 +101,23 @@
   .res-row b{color:#fff;}
   .res-row.bonus{color:var(--green);font-size:12px;border:none;padding:2px 0;}
 
+  /* ショップ */
+  #shopList{display:flex;flex-direction:column;gap:8px;width:min(560px,94vw);
+    flex:1;overflow-y:auto;padding:4px;}
+  .shop-row{background:#1b2b44;border:2px solid #34496b;border-radius:12px;
+    padding:10px 12px;display:flex;flex-direction:column;gap:4px;}
+  .shop-row.locked{opacity:.55;border-style:dashed;}
+  .shop-row.equipped{border-color:var(--green);}
+  .shop-name{font-size:14px;font-weight:bold;color:#fff;display:flex;justify-content:space-between;}
+  .shop-name .lv{color:var(--ui);}
+  .shop-meta{font-size:11px;color:#8fa5c4;line-height:1.5;}
+  .shop-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px;}
+  .shop-btn{background:#3d5270;color:#dbe6f5;border:none;border-radius:9px;
+    padding:8px 14px;font-size:12px;font-weight:bold;cursor:pointer;}
+  .shop-btn.buy{background:var(--ui);color:#3a2c00;}
+  .shop-btn.eq{background:var(--green);color:#08240f;}
+  .shop-btn:disabled{opacity:.4;cursor:default;}
+
   /* 写真設定 */
   .photo-card{background:#1b2b44;border:2px solid #34496b;border-radius:14px;
     padding:12px;display:flex;flex-direction:column;align-items:center;gap:6px;width:160px;}
@@ -171,6 +188,7 @@
   <h1>PHOTO INVASION 30</h1>
   <div class="coin-badge" id="titleCoins">$0</div>
   <button class="btn" id="goStages">ステージ選択</button>
+  <button class="btn sub" id="goShop">ショップ</button>
   <button class="btn sub" id="goPhoto">写真設定</button>
   <p class="hint" id="titleInfo"></p>
   <p class="hint" style="color:#ff8a3a;">開発中の新バージョンです<br>今のゲームは <b>/photo-invasion/</b> のまま遊べます</p>
@@ -182,6 +200,14 @@
   <div class="coin-badge" id="stageCoins">$0</div>
   <div id="stageGrid"></div>
   <button class="btn sub" id="stagesBack">タイトルへ</button>
+</div>
+
+<!-- ショップ(メイン武器) -->
+<div class="screen" id="scrShop" style="justify-content:flex-start;padding-top:2vh;">
+  <h1 style="font-size:clamp(17px,4.5vw,24px);">ショップ(メイン武器)</h1>
+  <div class="coin-badge" id="shopCoins">$0</div>
+  <div id="shopList"></div>
+  <button class="btn sub" id="shopBack">タイトルへ</button>
 </div>
 
 <!-- 写真設定 -->
@@ -372,6 +398,10 @@ const defenseHp = s => s<=10?10:s<=20?12:15;
 const waveCount = s => s<=6?3:s<=15?4:s<=24?5:6;
 const stageOf = id => STAGES[id-1];
 const mainOf  = id => MAINS.find(m=>m.id===id);
+const UP_COST_MUL=[1,2,4,7];
+const upgradeCost=(base,fromLv)=>base*UP_COST_MUL[fromLv-1];
+/* 武器ごとの倒れ方の再生フレーム数 */
+const DEATH_DUR={handgun:45,sonic:55,shock:55,freeze:60,shotgun:50,beam:32,gatling:55,plasma:66,grenade:72,rail:30};
 
 /* ================= 保存 ================= */
 const SAVE_KEY='photoInvasion30';
@@ -392,8 +422,13 @@ function load(){
     // 保存データが壊れていてもゲームが起動不能にならないよう、既定値で補う
     const s = Object.assign(JSON.parse(JSON.stringify(DEFAULT_SAVE)), o||{});
     if(typeof s.coins!=='number' || !isFinite(s.coins) || s.coins<0) s.coins=0;
-    if(!s.main || !s.main.handgun) s.main={handgun:{own:true,lv:1}};
-    if(!mainOf(s.eqMain)) s.eqMain='handgun';
+    if(!s.main || typeof s.main!=='object' || !s.main.handgun) s.main={handgun:{own:true,lv:1}};
+    for(const k of Object.keys(s.main)){
+      const e=s.main[k];
+      if(!mainOf(k) || !e || typeof e.lv!=='number' || e.lv<1 || e.lv>5){ delete s.main[k]; }
+    }
+    if(!s.main.handgun) s.main.handgun={own:true,lv:1};
+    if(!mainOf(s.eqMain) || !s.main[s.eqMain] || !s.main[s.eqMain].own) s.eqMain='handgun';
     if(typeof s.unlocked!=='number' || s.unlocked<1 || s.unlocked>30) s.unlocked=1;
     if(!s.cleared || typeof s.cleared!=='object') s.cleared={};
     return s;
@@ -783,7 +818,8 @@ function vib(p){ if(!sv.muted && navigator.vibrate) try{navigator.vibrate(p);}ca
 
 /* ================= 戦闘状態 ================= */
 let running=false, paused=false, stageId=1, S=null;
-let enemies=[], bullets=[], parts=[], floats=[];
+let enemies=[], bullets=[], parts=[], floats=[], fx=[];
+let gatlingRamp=0, pendingRail=0, pendingRailDmg=0;
 let defHp=10, defMax=10, timeLeft=60*60, waves=[], waveIdx=0, waveTimer=0;
 let spawnQueue=[], spawned=0, killed=0, leaked=0, earned=0;
 let combo=0, maxCombo=0, comboTimer=0, shots=0, hits=0, damageTaken=0;
@@ -809,7 +845,8 @@ function buildWaves(st){
 }
 function startStage(id){
   stageId=id; S=stageOf(id);
-  enemies=[]; bullets=[]; parts=[]; floats=[];
+  enemies=[]; bullets=[]; parts=[]; floats=[]; fx=[];
+  gatlingRamp=0; pendingRail=0; pendingRailDmg=0;
   defMax=defenseHp(id); defHp=defMax;
   timeLeft=60*60; waves=buildWaves(S); waveIdx=0; waveTimer=0;
   spawnQueue=waves[0].slice(); spawned=0; killed=0; leaked=0; earned=0;
@@ -847,15 +884,21 @@ function burst(x,y,c,n){
   for(let i=0;i<q;i++) parts.push({x,y,vx:(Math.random()-0.5)*5,vy:-Math.random()*4-1,life:22,c});
 }
 
-function hitEnemy(e,dmg){
+function hitEnemy(e,dmg,death){
   if(!e.alive) return;
+  // 冷凍銃Lv5: 凍結中の敵への次の攻撃が1.5倍
+  if(e.frozen>0 && e.freezeBonus){ dmg*=1.5; e.freezeBonus=false; addFloat(e.x,e.y-112,'1.5倍!','#8fd2ff'); }
   if(e.shield && !e.shieldUsed){ e.shieldUsed=true; dmg*=0.35; addFloat(e.x,e.y-90,'シールド!','#6ba3e0'); }
   e.hp-=dmg; e.flash=5; hits++;
   SFX.hit();
   if(e.hp<=0){
     e.alive=false; e.dying=1;
+    e.deathKind = death || 'handgun';
+    // 倒れ方ごとの初期パラメータ
+    if(e.deathKind==='shotgun'){ e.dvx=9+Math.random()*3; e.rot=0; }
+    else if(e.deathKind==='grenade'){ e.dvx=3; e.dvy=-6.5; e.rot=0; }
+    else if(e.deathKind==='gatling'){ e.rot=0; }
     killed++; combo++; comboTimer=150; maxCombo=Math.max(maxCombo,combo);
-    const T=ENEMY_TYPES[e.type];
     const band=COIN_TABLE[coinBand(stageId)];
     const r=band[e.type]||band.normal;
     let coin=Math.round(r[0]+Math.random()*(r[1]-r[0]));
@@ -863,6 +906,134 @@ function hitEnemy(e,dmg){
     addFloat(e.x,e.y-100,'+$'+coin,'#ffd94a');
     burst(e.x,e.y-50,TYPE_COLOR[e.type][0],10);
     SFX.kill(); vib(12);
+  }
+}
+
+/* ================= メイン武器の発射 ================= */
+function fireMain(){
+  const w=curMain(), lv=curLv(), dmg=mainDmg(), rate=mainRate();
+  fireCd=Math.round(60/rate);
+  const bx=PLAYER_X+30, by=GROUND-38;
+  shots++;
+  switch(w.id){
+    case 'handgun':
+      bullets.push({kind:'bullet',x:bx,y:by,vx:11,dmg,death:'handgun'}); SFX.shoot(); break;
+    case 'sonic':
+      bullets.push({kind:'sonic',x:bx,y:by,vx:7,dmg,death:'sonic',lv}); beep(240,0.12,'sine',0.06); break;
+    case 'shock':
+      bullets.push({kind:'shock',x:bx,y:by,vx:10,dmg,death:'shock',lv}); beep(880,0.06,'sawtooth',0.05); break;
+    case 'freeze':
+      bullets.push({kind:'freeze',x:bx,y:by,vx:9,dmg,death:'freeze',lv}); beep(1200,0.08,'sine',0.05); break;
+    case 'shotgun':{
+      // 扇状に発射。Lv5で本数と広がりが拡大
+      const n=lv>=5?7:5, spread=lv>=5?3.2:2.2;
+      for(let i=0;i<n;i++){
+        bullets.push({kind:'pellet',x:bx,y:by,vx:9+Math.random()*2,
+          vy:-spread+i*(spread*2/(n-1)),dmg:dmg*0.25,death:'shotgun',life:34});
+      }
+      beep(140,0.15,'square',0.09); break;
+    }
+    case 'beam':
+      beamShot(dmg, lv>=5?5:3); break;
+    case 'gatling':{
+      // 撃ち続けると威力上昇(Lv5で最大20%)
+      const maxR=lv>=5?0.20:0.10;
+      gatlingRamp=Math.min(120,gatlingRamp+3);
+      const mul=1+maxR*(gatlingRamp/120);
+      bullets.push({kind:'bullet',x:bx,y:by+(Math.random()*10-5),vx:13,dmg:dmg*mul,death:'gatling'});
+      SFX.shoot(); break;
+    }
+    case 'plasma':
+      bullets.push({kind:'plasma',x:bx,y:by,vx:8,dmg,death:'plasma',lv}); beep(300,0.14,'sawtooth',0.06); break;
+    case 'grenade':
+      bullets.push({kind:'grenade',x:bx,y:by-10,vx:6.5,vy:-8.5,dmg,death:'grenade',lv}); beep(200,0.1,'square',0.05); break;
+    case 'rail':
+      railShot(dmg);
+      // Lv5: 一定確率(30%)で2連射
+      if(lv>=5 && Math.random()<0.30){ pendingRail=8; pendingRailDmg=dmg; }
+      break;
+  }
+}
+function beamShot(dmg,maxTargets){
+  const y=GROUND-50;
+  const targets=enemies.filter(e=>e.alive).sort((a,b)=>a.x-b.x).slice(0,maxTargets);
+  targets.forEach(e=>hitEnemy(e,dmg,'beam'));
+  fx.push({kind:'beam',y,life:8});
+  beep(1500,0.1,'sine',0.06);
+}
+function railShot(dmg){
+  const y=GROUND-46;
+  enemies.filter(e=>e.alive).forEach(e=>hitEnemy(e,dmg,'rail'));
+  fx.push({kind:'rail',y,life:10});
+  shake=Math.max(shake,7);
+  beep(70,0.25,'sawtooth',0.1);
+}
+function explodeAt(x,y,r,dmg,death){
+  fx.push({kind:'ring',x,y,r,life:14});
+  burst(x,y,'#ff8a3a',16);
+  shake=Math.max(shake,6);
+  beep(90,0.2,'sawtooth',0.09);
+  for(const e of enemies){ if(e.alive && Math.abs(e.x-x)<r) hitEnemy(e,dmg,death); }
+}
+function grenadeMini(b){
+  // グレネードLv5: 爆発後に小型爆弾を2個発生
+  if(b.lv>=5 && !b.mini){
+    bullets.push({kind:'grenade',x:b.x,y:GROUND-40,vx:-2.5,vy:-6,dmg:b.dmg*0.3,lv:0,mini:true,death:'grenade'});
+    bullets.push({kind:'grenade',x:b.x,y:GROUND-40,vx: 3.5,vy:-6,dmg:b.dmg*0.3,lv:0,mini:true,death:'grenade'});
+  }
+}
+function onProjectileHit(b,e){
+  switch(b.kind){
+    case 'bullet':
+      hitEnemy(e,b.dmg,b.death); break;
+    case 'pellet':
+      hitEnemy(e,b.dmg,'shotgun');
+      if(e.alive){ e.x=Math.min(W-16,e.x+16); }   // 吹き飛ばし
+      break;
+    case 'sonic':{
+      // 小範囲攻撃+ふらつき(Lv5で延長)
+      fx.push({kind:'ring',x:b.x,y:e.y-50,r:55,life:12});
+      const dur=b.lv>=5?120:75;
+      for(const o of enemies){
+        if(o.alive && Math.abs(o.x-e.x)<55){
+          o.stagger=Math.max(o.stagger||0,dur);
+          hitEnemy(o, o===e?b.dmg:b.dmg*0.6, 'sonic');
+        }
+      }
+      break;
+    }
+    case 'shock':{
+      // 近くの敵へ電撃が連鎖(Lv5で3体)
+      hitEnemy(e,b.dmg,'shock');
+      const chains=b.lv>=5?3:1;
+      let src=e; const hitList=[e];
+      for(let i=0;i<chains;i++){
+        let best=null,bd=130;
+        for(const o of enemies){
+          if(o.alive && !hitList.includes(o)){
+            const d=Math.abs(o.x-src.x);
+            if(d<bd){bd=d;best=o;}
+          }
+        }
+        if(!best) break;
+        fx.push({kind:'zap',x1:src.x,y1:src.y-60,x2:best.x,y2:best.y-60,life:8});
+        hitEnemy(best,b.dmg*0.7,'shock');
+        hitList.push(best); src=best;
+      }
+      break;
+    }
+    case 'freeze':
+      hitEnemy(e,b.dmg,'freeze');
+      if(e.alive){ e.frozen=90; if(b.lv>=5) e.freezeBonus=true; }
+      break;
+    case 'plasma':
+      // 着弾地点で範囲爆発(Lv5で範囲20%拡大)
+      explodeAt(b.x,e.y-50, b.lv>=5?84:70, b.dmg, 'plasma');
+      break;
+    case 'grenade':
+      explodeAt(b.x,e.y-50, b.mini?50:90, b.dmg, 'grenade');
+      grenadeMini(b);
+      break;
   }
 }
 function leak(e){
@@ -895,34 +1066,63 @@ function update(){
 
   // 射撃
   if(fireCd>0) fireCd--;
-  if(fireHeld && fireCd<=0){
-    const rate=mainRate();
-    fireCd = Math.round(60/rate);
-    bullets.push({x:PLAYER_X+30, y:GROUND-38, vx:11, dmg:mainDmg()});
-    shots++; SFX.shoot();
-  }
+  if(fireHeld && fireCd<=0){ fireMain(); }
+  if(!fireHeld && gatlingRamp>0) gatlingRamp=Math.max(0,gatlingRamp-2);
+  // レールガンLv5の2連射(遅延分)
+  if(pendingRail>0){ pendingRail--; if(pendingRail===0) railShot(pendingRailDmg); }
 
   // 弾
   bullets=bullets.filter(b=>{
-    b.x+=b.vx;
+    if(b.kind==='grenade'){ b.x+=b.vx; b.y+=b.vy; b.vy+=0.32; }
+    else { b.x+=b.vx; if(b.vy) b.y+=b.vy; }
+    if(b.life!==undefined && --b.life<=0) return false;
     for(const e of enemies){
       if(!e.alive) continue;
-      if(Math.abs(b.x-e.x)<20*e.scale && b.y>e.y-100*e.scale && b.y<e.y-10){
-        hitEnemy(e,b.dmg); return false;
+      if(Math.abs(b.x-e.x)<20*e.scale && b.y>e.y-100*e.scale && b.y<e.y-6){
+        onProjectileHit(b,e); return false;
       }
     }
-    return b.x<W+20;
+    // グレネードは地面に落ちても爆発する
+    if(b.kind==='grenade' && b.y>=GROUND-4){
+      explodeAt(b.x,GROUND-30, b.mini?50:90, b.dmg,'grenade');
+      grenadeMini(b);
+      return false;
+    }
+    return b.x<W+20 && b.y<H+40;
   });
 
   // 敵
   for(const e of enemies){
-    if(!e.alive){ if(e.dying>0) e.dying++; continue; }
+    if(!e.alive){
+      if(e.dying>0){
+        e.dying++;
+        const k=e.deathKind;
+        // 倒れ方ごとの動き
+        if(k==='shotgun'){ e.x+=e.dvx; e.dvx*=0.94; e.rot+=0.25; }
+        else if(k==='grenade'){
+          e.x+=e.dvx; e.y+=e.dvy; e.dvy+=0.5; e.rot+=0.3;
+          if(e.y>=GROUND){ e.y=GROUND; e.dvy=-Math.abs(e.dvy)*0.55; }
+        }
+        else if(k==='rail'){ if(e.dying>10) e.x+=42; }
+        else if(k==='gatling'){ if(e.dying>20){ e.x+=6; e.y-=3; e.rot+=0.5; } }
+        else if(k==='plasma'){
+          if(e.dying<40) e.y-=1.6;
+          else if(e.dying===40){ burst(e.x,e.y-50,'#c77dff',24); shake=Math.max(shake,5); }
+        }
+        else if(k==='freeze'){ if(e.dying===45) burst(e.x,e.y-40,'#bfe6ff',20); }
+      }
+      continue;
+    }
     if(e.flash>0) e.flash--;
-    e.x-=e.spd; e.walk+=0.12;
+    if(e.frozen>0){ e.frozen--; continue; }   // 凍結中は動かない
+    const sp = e.stagger>0 ? e.spd*0.4 : e.spd;  // ふらつき中は減速
+    if(e.stagger>0) e.stagger--;
+    e.x-=sp; e.walk+=0.12;
     if(e.x<=DEF_X) leak(e);
   }
-  enemies=enemies.filter(e=>!e.remove && (e.alive || e.dying<40));
+  enemies=enemies.filter(e=>!e.remove && (e.alive || e.dying<(DEATH_DUR[e.deathKind]||45)));
 
+  fx=fx.filter(f=>--f.life>0);
   parts=parts.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.18; return --p.life>0; });
   floats=floats.filter(f=>{ f.y-=0.8; return --f.life>0; });
 
@@ -958,15 +1158,21 @@ function draw(){
 
   // 敵
   for(const e of enemies){
-    if(!e.alive){
-      // 仮の倒れ演出(武器別の演出はフェーズ3以降で実装)
-      const p=e.dying/40;
-      ctx.save(); ctx.globalAlpha=Math.max(0,1-p);
-      ctx.translate(e.x,e.y); ctx.rotate(p*1.4); ctx.translate(-e.x,-e.y);
-      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,charCfg.enemy,0,e.scale,e.type);
-      ctx.restore(); continue;
-    }
+    if(!e.alive){ drawDeadEnemy(e); continue; }
     drawEnemyArt(ctx,e.x,e.y,-1,e.walk,charCfg.enemy,e.flash,e.scale,e.type);
+    // 凍結表示(氷ブロック)
+    if(e.frozen>0){
+      ctx.fillStyle='rgba(160,220,255,.4)';
+      ctx.strokeStyle='rgba(200,240,255,.85)'; ctx.lineWidth=2;
+      const iw=52*e.scale, ih=104*e.scale;
+      ctx.beginPath(); ctx.roundRect(e.x-iw/2,e.y-ih,iw,ih,8); ctx.fill(); ctx.stroke();
+    }
+    // ふらつき表示(頭上のうずまき)
+    if(e.stagger>0){
+      ctx.strokeStyle='rgba(255,217,74,.9)'; ctx.lineWidth=2;
+      const a=performance.now()/150;
+      ctx.beginPath(); ctx.arc(e.x,e.y-118*e.scale,7,a,a+4.5); ctx.stroke();
+    }
     if(e.hp<e.maxHp){
       const bw=34*e.scale, by=e.y-108*e.scale;
       ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(e.x-bw/2,by,bw,4);
@@ -979,8 +1185,60 @@ function draw(){
     }
   }
   // 弾
-  ctx.fillStyle='#ffd94a';
-  for(const b of bullets) ctx.fillRect(b.x-5,b.y-2,10,4);
+  for(const b of bullets){
+    if(b.kind==='sonic'){
+      ctx.strokeStyle='#ffd94a'; ctx.lineWidth=2;
+      for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(b.x-i*7,b.y,5+i*4,-1,1); ctx.stroke(); }
+    } else if(b.kind==='shock'){
+      ctx.strokeStyle='#8fd2ff'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(b.x-12,b.y);
+      ctx.lineTo(b.x-6,b.y-4); ctx.lineTo(b.x,b.y+4); ctx.lineTo(b.x+6,b.y-2); ctx.stroke();
+    } else if(b.kind==='freeze'){
+      ctx.fillStyle='#bfe6ff';
+      ctx.beginPath();
+      for(let i=0;i<6;i++){ const a=i*Math.PI/3; ctx.moveTo(b.x,b.y); ctx.lineTo(b.x+Math.cos(a)*7,b.y+Math.sin(a)*7); }
+      ctx.strokeStyle='#bfe6ff'; ctx.lineWidth=2; ctx.stroke();
+    } else if(b.kind==='plasma'){
+      ctx.fillStyle='#c77dff';
+      ctx.beginPath(); ctx.arc(b.x,b.y,8,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(199,125,255,.5)'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(b.x,b.y,12+Math.random()*3,0,Math.PI*2); ctx.stroke();
+    } else if(b.kind==='grenade'){
+      ctx.fillStyle=b.mini?'#8fa5c4':'#5c7292';
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.mini?5:8,0,Math.PI*2); ctx.fill();
+    } else if(b.kind==='pellet'){
+      ctx.fillStyle='#ffb43a'; ctx.fillRect(b.x-3,b.y-1.5,6,3);
+    } else {
+      ctx.fillStyle='#ffd94a'; ctx.fillRect(b.x-5,b.y-2,10,4);
+    }
+  }
+  // 武器エフェクト
+  for(const f of fx){
+    if(f.kind==='beam'){
+      ctx.globalAlpha=f.life/8;
+      ctx.strokeStyle='#8fd2ff'; ctx.lineWidth=6;
+      ctx.beginPath(); ctx.moveTo(PLAYER_X+28,f.y); ctx.lineTo(W,f.y); ctx.stroke();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(PLAYER_X+28,f.y); ctx.lineTo(W,f.y); ctx.stroke();
+    } else if(f.kind==='rail'){
+      ctx.globalAlpha=f.life/10;
+      ctx.strokeStyle='#ffd94a'; ctx.lineWidth=10;
+      ctx.beginPath(); ctx.moveTo(PLAYER_X+28,f.y); ctx.lineTo(W,f.y); ctx.stroke();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(PLAYER_X+28,f.y); ctx.lineTo(W,f.y); ctx.stroke();
+    } else if(f.kind==='ring'){
+      ctx.globalAlpha=f.life/14;
+      ctx.strokeStyle='#ff8a3a'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.arc(f.x,f.y,f.r*(1-f.life/14+0.3),0,Math.PI*2); ctx.stroke();
+    } else if(f.kind==='zap'){
+      ctx.globalAlpha=f.life/8;
+      ctx.strokeStyle='#8fd2ff'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(f.x1,f.y1);
+      const mx=(f.x1+f.x2)/2, my=(f.y1+f.y2)/2+(Math.random()*16-8);
+      ctx.lineTo(mx,my); ctx.lineTo(f.x2,f.y2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=1;
   // 粒子
   for(const p of parts){ ctx.globalAlpha=Math.max(0,p.life/22); ctx.fillStyle=p.c; ctx.fillRect(p.x-2,p.y-2,4,4); }
   ctx.globalAlpha=1;
@@ -988,6 +1246,130 @@ function draw(){
   ctx.font='bold 14px sans-serif'; ctx.textAlign='center';
   for(const f of floats){ ctx.globalAlpha=Math.min(1,f.life/22); ctx.fillStyle=f.c; ctx.fillText(f.t,f.x,f.y); }
   ctx.globalAlpha=1;
+  ctx.restore();
+}
+
+/* ================= 武器ごとの倒れ方(10種) ================= */
+function drawDeadEnemy(e){
+  const k=e.deathKind||'handgun', t=e.dying, D=DEATH_DUR[k]||45, p=Math.min(1,t/D);
+  const cfg=charCfg.enemy;
+  ctx.save();
+  switch(k){
+    case 'handgun':{
+      // 少し後ろへ跳ね、膝をついて仰向けに倒れる
+      const back=Math.min(10,t*1.6);
+      ctx.globalAlpha=1-p;
+      ctx.translate(e.x+back,e.y); ctx.rotate(-Math.min(1.5,t*0.055)); ctx.translate(-(e.x+back),-e.y);
+      drawEnemyArt(ctx,e.x+back,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'sonic':{
+      // 体が波打つように変形して転倒
+      ctx.globalAlpha=1-p;
+      const wob=Math.sin(t*0.75)*0.28*(1-p);
+      ctx.translate(e.x,e.y); ctx.scale(1+wob,1-wob); ctx.rotate(p*1.3); ctx.translate(-e.x,-e.y);
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'shock':{
+      // 全身が点滅し骨格風シルエットが見え、直立から倒れる
+      ctx.globalAlpha=1-p*p;
+      const fall=Math.max(0,(t-25))*0.09;
+      ctx.translate(e.x,e.y); ctx.rotate(Math.min(1.5,fall)); ctx.translate(-e.x,-e.y);
+      if(Math.floor(t/3)%2===0){
+        drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      } else {
+        // 骨格風シルエット
+        ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.lineCap='round';
+        const s=e.scale;
+        ctx.beginPath(); ctx.arc(e.x,e.y-82*s,13*s,0,Math.PI*2); ctx.stroke();     // 頭
+        ctx.beginPath(); ctx.moveTo(e.x,e.y-68*s); ctx.lineTo(e.x,e.y-28*s); ctx.stroke();  // 背骨
+        for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(e.x-10*s,e.y-(60-i*9)*s); ctx.lineTo(e.x+10*s,e.y-(60-i*9)*s); ctx.stroke(); }  // 肋骨
+        ctx.beginPath(); ctx.moveTo(e.x,e.y-28*s); ctx.lineTo(e.x-8*s,e.y); ctx.stroke();   // 脚
+        ctx.beginPath(); ctx.moveTo(e.x,e.y-28*s); ctx.lineTo(e.x+8*s,e.y); ctx.stroke();
+      }
+      break;
+    }
+    case 'freeze':{
+      // 氷漬けになり横へ倒れ、氷片になる
+      if(t<45){
+        const tip=Math.max(0,(t-18))*0.055;
+        ctx.translate(e.x,e.y); ctx.rotate(Math.min(1.5,tip)); ctx.translate(-e.x,-e.y);
+        ctx.globalAlpha=1;
+        drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+        ctx.fillStyle='rgba(160,220,255,.5)';
+        ctx.strokeStyle='rgba(220,245,255,.9)'; ctx.lineWidth=2;
+        const iw=54*e.scale, ih=106*e.scale;
+        ctx.beginPath(); ctx.roundRect(e.x-iw/2,e.y-ih,iw,ih,8); ctx.fill(); ctx.stroke();
+      }
+      // 45フレームで砕けて消える(粒子はupdate側で発生)
+      break;
+    }
+    case 'shotgun':{
+      // 強い衝撃で後方へ大きく吹き飛ぶ
+      ctx.globalAlpha=1-p;
+      ctx.translate(e.x,e.y-30); ctx.rotate(e.rot||0); ctx.translate(-e.x,-(e.y-30));
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'beam':{
+      // 青白く発光し、輪郭だけ残って粒子化
+      ctx.globalAlpha=Math.max(0,1-p*1.4);
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      ctx.globalAlpha=Math.max(0,1-p);
+      ctx.fillStyle='rgba(160,220,255,.5)';
+      ctx.beginPath(); ctx.arc(e.x,e.y-55*e.scale,45*e.scale*(0.6+p*0.6),0,Math.PI*2); ctx.fill();
+      if(t%2===0) parts.push({x:e.x+(Math.random()*40-20),y:e.y-Math.random()*90,vx:0,vy:-2,life:18,c:'#8fd2ff'});
+      break;
+    }
+    case 'gatling':{
+      // 左右に揺れてから回転しつつ画面外へ
+      const wx = t<=20 ? Math.sin(t*1.3)*5 : 0;
+      ctx.globalAlpha=1-p*0.7;
+      ctx.translate(e.x+wx,e.y-30); ctx.rotate(e.rot||0); ctx.translate(-(e.x+wx),-(e.y-30));
+      drawEnemyArt(ctx,e.x+wx,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'plasma':{
+      // 電気の球に包まれて浮上し、光の爆発で消える
+      if(t<40){
+        drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+        ctx.strokeStyle='rgba(199,125,255,.85)'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(e.x,e.y-55*e.scale,50*e.scale+Math.random()*5,0,Math.PI*2); ctx.stroke();
+      } else if(t<50){
+        ctx.globalAlpha=(50-t)/10;
+        ctx.fillStyle='#fff';
+        ctx.beginPath(); ctx.arc(e.x,e.y-55*e.scale,(t-38)*7,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case 'grenade':{
+      // 爆風で跳ねながら転がる
+      ctx.globalAlpha=1-p*p;
+      ctx.translate(e.x,e.y-30); ctx.rotate(e.rot||0); ctx.translate(-e.x,-(e.y-30));
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'rail':{
+      // 一瞬停止した後、一直線に超高速で画面外へ
+      if(t<=10 && Math.floor(t/2)%2===0){ ctx.globalAlpha=0.85; ctx.fillStyle='#fff';
+        ctx.fillRect(e.x-24*e.scale,e.y-104*e.scale,48*e.scale,104*e.scale);
+      }
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      if(t>10){
+        ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=3;
+        for(let i=0;i<3;i++){
+          ctx.beginPath(); ctx.moveTo(e.x-40-i*22,e.y-40-i*16); ctx.lineTo(e.x-90-i*22,e.y-40-i*16); ctx.stroke();
+        }
+      }
+      break;
+    }
+    default:{
+      ctx.globalAlpha=1-p;
+      ctx.translate(e.x,e.y); ctx.rotate(p*1.4); ctx.translate(-e.x,-e.y);
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+    }
+  }
   ctx.restore();
 }
 function loop(){
@@ -1010,7 +1392,7 @@ function refreshHud(){
 /* ================= 評価 ================= */
 function judge(){
   const timeSec=(60*60-timeLeft)/60;
-  const acc = shots ? hits/shots : 0;
+  const acc = shots ? Math.min(1, hits/shots) : 0;
   const killRate = killed/S.count;
   let p=0;
   p += (defHp/defMax)*40;            // 残り防衛HP
@@ -1064,7 +1446,7 @@ function showResult(win,rank,score,base,bonusRows,first){
   const rk=document.getElementById('resRank');
   rk.textContent=rank;
   rk.style.color = {S:'#ffd94a',A:'#5be36b',B:'#6ba3e0',C:'#8fa5c4',D:'#ff8a3a'}[rank];
-  const acc = shots?Math.round(hits/shots*100):0;
+  const acc = shots?Math.min(100,Math.round(hits/shots*100)):0;
   const rows=[
     ['獲得コイン','$'+earned], ['撃破数',killed+' / '+S.count],
     ['命中率',acc+'%'], ['最高コンボ',maxCombo],
@@ -1145,6 +1527,76 @@ function renderStages(){
     grid.appendChild(d);
   });
 }
+/* ================= ショップ(メイン武器) ================= */
+function renderShop(){
+  document.getElementById('shopCoins').textContent='$'+sv.coins;
+  const list=document.getElementById('shopList');
+  list.innerHTML='';
+  MAINS.forEach((w,i)=>{
+    const st=sv.main[w.id];
+    const own=st && st.own;
+    const lv=own?st.lv:0;
+    const prev=i===0?null:MAINS[i-1];
+    const prevLv5 = !prev || (sv.main[prev.id] && sv.main[prev.id].lv>=5);
+    const row=document.createElement('div');
+    row.className='shop-row'+(own?'':(prevLv5?'':' locked'))+(sv.eqMain===w.id?' equipped':'');
+    let metaHtml='', btnsHtml='';
+    if(own){
+      const d=w.dmg[lv-1], r=w.rate[lv-1];
+      metaHtml='威力 '+d+' / 連射 '+r+'発/秒 ・ 理論火力 '+Math.round(d*r)+'/秒';
+      if(lv<5){
+        const nd=w.dmg[lv], nr=w.rate[lv], cost=upgradeCost(w.basePrice,lv);
+        metaHtml+='<br>強化後: 威力 '+d+'→'+nd+' / 連射 '+r+'→'+nr+' / 理論火力 '+Math.round(d*r)+'→'+Math.round(nd*nr);
+        btnsHtml+='<button class="shop-btn buy" data-up="'+w.id+'" '+(sv.coins<cost?'disabled':'')+'>強化 $'+cost.toLocaleString()+'</button>';
+      } else {
+        metaHtml+='<br><span style="color:#ffd94a;">最大レベル。'+(i<MAINS.length-1?'次の武器が購入可能!':'')+'</span>';
+      }
+      btnsHtml+= sv.eqMain===w.id
+        ? '<button class="shop-btn eq" disabled>装備中</button>'
+        : '<button class="shop-btn eq" data-eq="'+w.id+'">装備</button>';
+    } else if(prevLv5){
+      metaHtml='Lv1: 威力 '+w.dmg[0]+' / 連射 '+w.rate[0]+'発/秒';
+      btnsHtml='<button class="shop-btn buy" data-buy="'+w.id+'" '+(sv.coins<w.unlockPrice?'disabled':'')+'>購入 $'+w.unlockPrice.toLocaleString()+'</button>';
+    } else {
+      metaHtml='🔒 '+prev.name+'をLv5にすると購入できます';
+    }
+    row.innerHTML='<div class="shop-name"><span>'+(own?'':(prevLv5?'':'🔒 '))+w.name+'</span>'+(own?'<span class="lv">Lv'+lv+'</span>':'')+'</div>'
+      +'<div class="shop-meta">'+metaHtml+'</div>'
+      +(btnsHtml?'<div class="shop-btns">'+btnsHtml+'</div>':'');
+    list.appendChild(row);
+  });
+  list.querySelectorAll('[data-buy]').forEach(b=>{
+    b.onclick=()=>{
+      const w=mainOf(b.dataset.buy);
+      const st=sv.main[w.id];
+      if(st && st.own) return;                       // 二重購入防止
+      if(sv.coins<w.unlockPrice) return;             // コイン不足
+      sv.coins-=w.unlockPrice;
+      sv.main[w.id]={own:true,lv:1};
+      save(); SFX.clear(); renderShop();
+    };
+  });
+  list.querySelectorAll('[data-up]').forEach(b=>{
+    b.onclick=()=>{
+      const w=mainOf(b.dataset.up);
+      const st=sv.main[w.id];
+      if(!st || !st.own || st.lv>=5) return;
+      const cost=upgradeCost(w.basePrice,st.lv);
+      if(sv.coins<cost) return;
+      sv.coins-=cost; st.lv++;
+      save();
+      if(st.lv>=5){ SFX.clear(); alert(w.name+'がLv5になりました!\n次の武器がショップに追加されました'); }
+      else SFX.tap();
+      renderShop();
+    };
+  });
+  list.querySelectorAll('[data-eq]').forEach(b=>{
+    b.onclick=()=>{ sv.eqMain=b.dataset.eq; save(); SFX.tap(); renderShop(); };
+  });
+}
+document.getElementById('goShop').onclick=()=>{ SFX.tap(); showScreen('scrShop'); renderShop(); };
+document.getElementById('shopBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
+
 document.getElementById('goStages').onclick=()=>{ SFX.tap(); showScreen('scrStages'); renderStages(); };
 document.getElementById('stagesBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
 document.getElementById('goPhoto').onclick=()=>{ SFX.tap(); showScreen('scrPhoto'); drawPrevAll(); };
