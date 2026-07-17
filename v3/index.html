@@ -48,7 +48,7 @@
   /* 戦闘HUD */
   #hud{position:fixed;inset:0;z-index:10;pointer-events:none;display:none;}
   #hud.show{display:block;}
-  .hud-top{position:absolute;top:0;left:0;right:0;padding:6px 10px;
+  .hud-top{position:absolute;top:0;left:0;right:60px;padding:6px 10px;
     display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
     font-size:12px;font-weight:bold;text-shadow:0 2px 4px #000;}
   .hud-l{display:flex;flex-direction:column;gap:2px;}
@@ -71,22 +71,28 @@
     display:flex;align-items:center;justify-content:center;color:#fff;
     font-weight:bold;user-select:none;z-index:11;}
   .pad:active{background:rgba(255,255,255,.3);}
+  /* 右下: ショット + 武器切替 */
   #btnMain{right:4vw;bottom:calc(5vh + 4px);width:84px;height:84px;font-size:13px;
     background:rgba(255,90,74,.3);border-color:rgba(255,90,74,.7);}
-  #btnSub{right:calc(4vw + 94px);bottom:5vh;width:64px;height:64px;font-size:12px;
+  #btnSwap{right:calc(4vw + 92px);bottom:calc(5vh + 4px);width:58px;height:58px;font-size:10px;
+    background:rgba(255,217,74,.25);border-color:rgba(255,217,74,.7);line-height:1.2;text-align:center;}
+  /* 左下: サブ + 必殺技(旧・武器レベル表示の位置) */
+  #btnSub{left:4vw;bottom:calc(5vh + 4px);width:70px;height:70px;font-size:12px;
     background:rgba(160,107,201,.3);border-color:rgba(160,107,201,.7);}
-  #btnUlt{right:4vw;bottom:calc(5vh + 96px);width:64px;height:64px;font-size:11px;
+  #btnUlt{left:calc(4vw + 78px);bottom:calc(5vh + 4px);width:70px;height:70px;font-size:11px;
     background:rgba(91,227,107,.25);border-color:rgba(91,227,107,.7);}
   #btnUlt.ready{background:rgba(91,227,107,.65);animation:pulse .8s infinite alternate;}
   @keyframes pulse{from{transform:scale(1);}to{transform:scale(1.09);}}
   .pad .cd{position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,.6);
     display:flex;align-items:center;justify-content:center;font-size:15px;}
   .pad .cd.hide{display:none;}
-  #btnPause{position:fixed;right:8px;top:8px;width:40px;height:40px;border-radius:11px;
-    pointer-events:auto;z-index:11;background:rgba(20,30,45,.8);border:none;color:#dbe6f5;
-    font-size:15px;font-weight:bold;cursor:pointer;}
-  #equipInfo{position:fixed;left:8px;bottom:5vh;font-size:10px;color:#dbe6f5;
-    text-shadow:0 2px 4px #000;line-height:1.6;z-index:11;pointer-events:none;}
+  /* 右上を縦一列にして重なりを解消 */
+  .topbtn{position:fixed;right:8px;width:44px;height:44px;border-radius:11px;
+    pointer-events:auto;z-index:61;background:rgba(20,30,45,.85);border:none;color:#dbe6f5;
+    font-size:16px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  #btnFull{top:8px;}
+  #btnPause{top:60px;}
+  #btnMute{top:112px;font-size:15px;}
 
   .overlay{position:fixed;inset:0;z-index:30;display:none;flex-direction:column;
     align-items:center;justify-content:center;gap:12px;background:rgba(6,10,18,.9);padding:16px;}
@@ -128,6 +134,9 @@
   .set-btn{flex:1;background:#233650;color:#8fa5c4;border:2px solid #3d5270;border-radius:10px;
     padding:10px 4px;font-size:12px;font-weight:bold;cursor:pointer;}
   .set-btn.on{background:var(--green);color:#08240f;border-color:var(--green);}
+  #codeOut,#codeIn{width:100%;height:74px;background:#0e1726;border:2px solid #3d5270;
+    border-radius:10px;color:#dbe6f5;font-size:11px;padding:8px;font-family:monospace;
+    resize:none;word-break:break-all;}
 
   /* 写真設定 */
   .photo-card{background:#1b2b44;border:2px solid #34496b;border-radius:14px;
@@ -192,9 +201,11 @@
     </div>
   </div>
 </div>
-<div id="equipInfo"></div>
-<button id="btnPause">II</button>
+<button class="topbtn" id="btnFull">⛶</button>
+<button class="topbtn" id="btnPause">II</button>
+<button class="topbtn" id="btnMute">🔊</button>
 <div class="pad" id="btnMain">ショット</div>
+<div class="pad" id="btnSwap">武器<br>切替</div>
 <div class="pad" id="btnSub">サブ<div class="cd hide" id="cdSub"></div></div>
 <div class="pad" id="btnUlt">必殺<div class="cd hide" id="cdUlt"></div></div>
 
@@ -205,6 +216,7 @@
   <button class="btn" id="goStages">ステージ選択</button>
   <button class="btn sub" id="goShop">ショップ</button>
   <button class="btn sub" id="goPhoto">写真設定</button>
+  <button class="btn sub" id="goBackup">データのバックアップ</button>
   <button class="btn sub" id="goSettings">設定</button>
   <p class="hint" id="titleInfo"></p>
   <p class="hint" style="color:#ff8a3a;">開発中の新バージョンです<br>今のゲームは <b>/photo-invasion/</b> のまま遊べます</p>
@@ -235,32 +247,7 @@
 <div class="screen" id="scrPhoto" style="justify-content:flex-start;padding-top:2vh;">
   <h1 style="font-size:clamp(17px,4.5vw,24px);">写真設定</h1>
   <p class="hint" style="max-width:600px;">顔はめ込み: 写真の中央を丸く切り抜いて頭にセット。全身画像: 選ぶと背景切り抜き画面が開き、背景部分をタップすると近い色の背景を透明にできます。</p>
-  <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
-    <div class="photo-card">
-      <h3>主人公</h3>
-      <canvas id="prevHero" width="130" height="150"></canvas>
-      <div class="mode-row">
-        <button class="mode-btn on" data-who="hero" data-mode="face">顔はめ込み</button>
-        <button class="mode-btn" data-who="hero" data-mode="body">全身画像</button>
-      </div>
-      <label class="btn sub" style="text-align:center;font-size:12px;padding:9px 14px;">写真を選ぶ
-        <input type="file" id="fileHero" accept="image/*" style="display:none;">
-      </label>
-      <button class="btn sub" data-clear="hero" style="font-size:11px;padding:7px 12px;">消す</button>
-    </div>
-    <div class="photo-card">
-      <h3>敵エイリアン</h3>
-      <canvas id="prevEnemy" width="130" height="150"></canvas>
-      <div class="mode-row">
-        <button class="mode-btn on" data-who="enemy" data-mode="face">顔はめ込み</button>
-        <button class="mode-btn" data-who="enemy" data-mode="body">全身画像</button>
-      </div>
-      <label class="btn sub" style="text-align:center;font-size:12px;padding:9px 14px;">写真を選ぶ
-        <input type="file" id="fileEnemy" accept="image/*" style="display:none;">
-      </label>
-      <button class="btn sub" data-clear="enemy" style="font-size:11px;padding:7px 12px;">消す</button>
-    </div>
-  </div>
+  <div id="photoCards" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;overflow-y:auto;max-height:60vh;padding:4px;"></div>
   <p class="hint">写真は端末内だけで処理され、外部には送られません。<br>ブラウザを閉じると消えます。</p>
   <button class="btn" id="photoBack">戻る</button>
 </div>
@@ -300,6 +287,44 @@
   </div>
 </div>
 
+
+<!-- データのバックアップ -->
+<div class="screen" id="scrBackup" style="justify-content:flex-start;padding-top:2vh;">
+  <h1 style="font-size:clamp(17px,4.5vw,24px);">データのバックアップ</h1>
+  <div class="set-block" style="width:min(520px,94vw);align-items:stretch;">
+    <div class="set-label" style="text-align:center;">① 今のデータを保存する</div>
+    <button class="btn sub" id="genCode">最新のコードを生成</button>
+    <textarea id="codeOut" readonly placeholder="ここにコードが出ます"></textarea>
+    <button class="btn sub" id="copyCode">コピーする</button>
+    <p class="hint" style="font-size:11px;">出てきたコードをLINEのメモなど、自分だけが見られる所に保管してください。</p>
+  </div>
+  <div class="set-block" style="width:min(520px,94vw);align-items:stretch;">
+    <div class="set-label" style="text-align:center;">② コードから元に戻す</div>
+    <button class="btn sub" id="pasteCode">クリップボードから貼り付け</button>
+    <textarea id="codeIn" placeholder="ここにコードを貼り付け"></textarea>
+    <button class="btn" id="restoreCode" style="background:#ff8a3a;box-shadow:0 4px 0 #a3521c;">このコードで復元する</button>
+    <p class="hint" style="font-size:11px;color:#ff8a3a;">⚠️ 復元すると今の進み具合は上書きされて消えます。<br>写真はバックアップに入りません。</p>
+  </div>
+  <button class="btn" id="backupBack">タイトルへ</button>
+</div>
+
+<!-- iPhone向け全画面の案内 -->
+<div class="overlay" id="ovFsHelp" style="z-index:70;">
+  <div class="card" style="text-align:left;">
+    <h2 style="font-size:18px;">この端末では全画面にできません</h2>
+    <p class="hint" style="text-align:left;line-height:1.7;font-size:12px;">
+      iPhoneは本体側の制限で、ブラウザから全画面にする機能が使えません(Safari・Chromeなどブラウザを変えても同じです)。<br><br>
+      かわりに<b style="color:#ffd94a;">ホーム画面に追加</b>すると、アドレスバーのない全画面で遊べます。<br><br>
+      <b>やり方(Safariの場合)</b><br>
+      1. 画面下の「共有」ボタン(□に↑のマーク)を押す<br>
+      2. 「ホーム画面に追加」を選ぶ<br>
+      3. 「追加」を押す<br>
+      4. ホーム画面のアイコンから起動する<br><br>
+      起動後、端末を横向きにすると一番広く表示されます。
+    </p>
+    <button class="btn" id="fsHelpClose">閉じる</button>
+  </div>
+</div>
 
 <!-- 設定 -->
 <div class="screen" id="scrSettings">
@@ -577,7 +602,10 @@ function fitCanvas(){
 addEventListener('resize', fitCanvas); fitCanvas();
 
 /* ================= 写真 ================= */
-const charCfg={ hero:{mode:'face',faceImg:null,bodyImg:null}, enemy:{mode:'face',faceImg:null,bodyImg:null} };
+const CHAR_KEYS=['hero','normal','fast','heavy','boss'];
+const CHAR_NAMES={hero:'主人公',normal:'通常敵',fast:'高速敵',heavy:'重装敵',boss:'ボス'};
+const charCfg={};
+CHAR_KEYS.forEach(k=>charCfg[k]={mode:'face',faceImg:null,bodyImg:null});
 function makeFaceCanvas(img){
   const size=128, c=document.createElement('canvas');
   c.width=c.height=size;
@@ -595,27 +623,51 @@ function loadPhoto(who, file){
   img.onerror=()=>{ URL.revokeObjectURL(url); alert('画像を読み込めませんでした'); };
   img.src=url;
 }
-document.getElementById('fileHero').onchange =e=>{ if(e.target.files[0]) loadPhoto('hero', e.target.files[0]); e.target.value=''; };
-document.getElementById('fileEnemy').onchange=e=>{ if(e.target.files[0]) loadPhoto('enemy',e.target.files[0]); e.target.value=''; };
-document.querySelectorAll('[data-clear]').forEach(b=>{
-  b.onclick=()=>{ const c=charCfg[b.dataset.clear]; c.faceImg=null; c.bodyImg=null; drawPrevAll(); };
-});
-document.querySelectorAll('.mode-btn').forEach(b=>{
-  b.onclick=()=>{
-    charCfg[b.dataset.who].mode=b.dataset.mode;
-    document.querySelectorAll('.mode-btn[data-who="'+b.dataset.who+'"]').forEach(x=>x.classList.toggle('on',x===b));
-    drawPrevAll();
-  };
-});
-const prevHeroCtx =document.getElementById('prevHero').getContext('2d');
-const prevEnemyCtx=document.getElementById('prevEnemy').getContext('2d');
+/* 写真設定カード(主人公・通常敵・高速敵・重装敵・ボスの5枠)を生成 */
+const prevCtxs={};
+function buildPhotoCards(){
+  const wrap=document.getElementById('photoCards');
+  wrap.innerHTML='';
+  CHAR_KEYS.forEach(k=>{
+    const d=document.createElement('div');
+    d.className='photo-card';
+    d.innerHTML=
+      '<h3>'+CHAR_NAMES[k]+'</h3>'+
+      '<canvas id="prev_'+k+'" width="120" height="140"></canvas>'+
+      '<div class="mode-row">'+
+        '<button class="mode-btn on" data-who="'+k+'" data-mode="face">顔はめ込み</button>'+
+        '<button class="mode-btn" data-who="'+k+'" data-mode="body">全身画像</button>'+
+      '</div>'+
+      '<label class="btn sub" style="text-align:center;font-size:12px;padding:9px 12px;">写真を選ぶ'+
+        '<input type="file" data-file="'+k+'" accept="image/*" style="display:none;">'+
+      '</label>'+
+      '<button class="btn sub" data-clear="'+k+'" style="font-size:11px;padding:7px 12px;">消す</button>';
+    wrap.appendChild(d);
+    prevCtxs[k]=document.getElementById('prev_'+k).getContext('2d');
+  });
+  wrap.querySelectorAll('[data-file]').forEach(inp=>{
+    inp.onchange=e=>{ if(e.target.files[0]) loadPhoto(inp.dataset.file, e.target.files[0]); e.target.value=''; };
+  });
+  wrap.querySelectorAll('[data-clear]').forEach(b=>{
+    b.onclick=()=>{ const c=charCfg[b.dataset.clear]; c.faceImg=null; c.bodyImg=null; drawPrevAll(); };
+  });
+  wrap.querySelectorAll('.mode-btn').forEach(b=>{
+    b.onclick=()=>{
+      charCfg[b.dataset.who].mode=b.dataset.mode;
+      wrap.querySelectorAll('.mode-btn[data-who="'+b.dataset.who+'"]').forEach(x=>x.classList.toggle('on',x===b));
+      drawPrevAll();
+    };
+  });
+}
 function drawPrevAll(){
-  [[prevHeroCtx,'hero',drawPlayerArt],[prevEnemyCtx,'enemy',null]].forEach(([g,who])=>{
-    g.clearRect(0,0,130,150);
-    g.fillStyle='#2c3e57'; g.fillRect(0,0,130,150);
-    g.fillStyle='#4a3b28'; g.fillRect(0,132,130,18);
-    if(who==='hero') drawPlayerArt(g,65,132,charCfg.hero);
-    else drawEnemyArt(g,65,132,-1,performance.now()/150,charCfg.enemy,0,1.0,'normal');
+  CHAR_KEYS.forEach(k=>{
+    const g=prevCtxs[k]; if(!g) return;
+    g.clearRect(0,0,120,140);
+    g.fillStyle='#2c3e57'; g.fillRect(0,0,120,140);
+    g.fillStyle='#4a3b28'; g.fillRect(0,124,120,16);
+    if(k==='hero') drawPlayerArt(g,60,124,charCfg.hero);
+    else if(k==='boss') drawEnemyArt(g,60,124,-1,performance.now()/150,charCfg.boss,0,0.95,'heavy');
+    else drawEnemyArt(g,60,124,-1,performance.now()/150,charCfg[k],0,1.0,k);
   });
 }
 setInterval(()=>{ if(document.getElementById('scrPhoto').classList.contains('show')) drawPrevAll(); },120);
@@ -865,7 +917,7 @@ function drawEnemyArt(g,footX,footY,dir,walk,cfg,flash,scale,type){
   g.save(); g.translate(footX,footY); g.scale(dir*scale,scale);
   if(flash>0) g.globalAlpha=.5;
   if(cfg && cfg.mode==='body' && cfg.bodyImg){
-    const b=cfg.bodyImg, h=130, w=h*b.width/b.height;
+    const b=cfg.bodyImg, h=(scale>=2?110:150), w=h*b.width/b.height;
     g.drawImage(b,-w/2,-h,w,h); g.restore(); return;
   }
   const leg=Math.sin(walk)*8;
@@ -899,7 +951,7 @@ function drawEnemyArt(g,footX,footY,dir,walk,cfg,flash,scale,type){
 function drawPlayerArt(g,x,y,cfg){
   g.save(); g.translate(x,y);
   if(cfg && cfg.mode==='body' && cfg.bodyImg){
-    const b=cfg.bodyImg, h=135, w=h*b.width/b.height;
+    const b=cfg.bodyImg, h=150, w=h*b.width/b.height;
     g.drawImage(b,-w/2,-h,w,h); g.restore(); return;
   }
   g.fillStyle='#6b4a2a'; g.fillRect(-14,-8,28,8);
@@ -934,10 +986,71 @@ function beep(freq,dur,type,vol){
     o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur);
   }catch(e){}
 }
-const SFX={ shoot:()=>beep(680,0.05,'square',0.04), hit:()=>beep(320,0.04,'square',0.05),
+/* 周波数を時間で変化させる音(スイープ) */
+function sweep(f1,f2,dur,type,vol){
+  if(sv.muted) return;
+  try{
+    const c=ac(), o=c.createOscillator(), g=c.createGain();
+    o.type=type||'sine';
+    o.frequency.setValueAtTime(f1,c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20,f2),c.currentTime+dur);
+    g.gain.setValueAtTime(vol||0.06,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+dur);
+  }catch(e){}
+}
+/* ざらついたノイズ音(爆発・チェーンソー等) */
+function noise(dur,vol,filterHz){
+  if(sv.muted) return;
+  try{
+    const c=ac(), len=Math.floor(c.sampleRate*dur);
+    const buf=c.createBuffer(1,len,c.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*(1-i/len);
+    const src=c.createBufferSource(); src.buffer=buf;
+    const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=filterHz||900;
+    const g=c.createGain(); g.gain.value=vol||0.09;
+    src.connect(f); f.connect(g); g.connect(c.destination); src.start();
+  }catch(e){}
+}
+const SFX={
+  shoot:()=>beep(680,0.05,'square',0.04), hit:()=>beep(320,0.04,'square',0.05),
   kill:()=>beep(180,0.14,'sawtooth',0.06), leak:()=>beep(110,0.22,'sawtooth',0.09),
   clear:()=>{beep(660,0.12,'triangle',0.08);setTimeout(()=>beep(880,0.2,'triangle',0.08),120);},
-  lose:()=>beep(90,0.5,'sawtooth',0.09), tap:()=>beep(520,0.03,'square',0.03) };
+  lose:()=>beep(90,0.5,'sawtooth',0.09), tap:()=>beep(520,0.03,'square',0.03),
+  weaponSwitch:()=>{beep(440,0.05,'square',0.05);setTimeout(()=>beep(660,0.06,'square',0.05),55);},
+  levelup:()=>{[523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.1,'triangle',0.07),i*70));},
+  // メイン武器
+  w_handgun:()=>beep(680,0.05,'square',0.045),
+  w_sonic:()=>sweep(900,180,0.22,'sine',0.07),            // 低く落ちる音波
+  w_shock:()=>{beep(1400,0.03,'sawtooth',0.05); noise(0.06,0.04,3000);},   // バチッ
+  w_freeze:()=>sweep(1800,900,0.16,'sine',0.05),          // キーン
+  w_shotgun:()=>{noise(0.16,0.11,1200); beep(90,0.1,'square',0.06);},      // ドンッ
+  w_beam:()=>sweep(1600,1900,0.14,'sine',0.06),
+  w_gatling:()=>beep(560+Math.random()*90,0.035,'square',0.035),
+  w_plasma:()=>sweep(220,520,0.18,'sawtooth',0.06),
+  w_grenade:()=>beep(200,0.08,'square',0.05),
+  w_rail:()=>{sweep(2000,80,0.3,'sawtooth',0.1); noise(0.2,0.07,600);},    // ズドーン
+  // サブ武器
+  s_punch:()=>{noise(0.08,0.09,700); beep(200,0.05,'square',0.05);},
+  s_box:()=>noise(0.1,0.07,500),
+  s_film:()=>sweep(700,1300,0.2,'sine',0.05),
+  s_handlift:()=>sweep(140,260,0.22,'square',0.06),
+  s_pallet:()=>{noise(0.1,0.08,600); beep(170,0.07,'square',0.05);},
+  s_katana:()=>sweep(1800,700,0.1,'square',0.06),         // シュッ
+  s_chainsaw:()=>{noise(0.4,0.06,1600); sweep(140,170,0.4,'sawtooth',0.05);},
+  s_hammer:()=>{noise(0.24,0.12,420); beep(70,0.2,'sawtooth',0.09);},
+  s_barrier:()=>sweep(400,900,0.2,'sine',0.06),
+  // 必殺技
+  u_flame:()=>noise(0.6,0.09,1400),
+  u_rocket:()=>{sweep(700,120,0.25,'sawtooth',0.08); setTimeout(()=>{noise(0.35,0.13,500);},220);},
+  u_tornado:()=>{noise(0.6,0.07,2200); sweep(300,600,0.6,'sine',0.05);},
+  u_gravity:()=>sweep(400,45,0.7,'sine',0.1),
+  u_forklift:()=>{sweep(120,150,0.5,'square',0.07); noise(0.3,0.05,400);},
+  u_meteor:()=>{sweep(1200,60,0.5,'sawtooth',0.1); setTimeout(()=>{noise(0.5,0.14,400);},420);},
+  explode:()=>{noise(0.28,0.12,600); beep(80,0.16,'sawtooth',0.07);},
+  bossAppear:()=>{[110,98,87,110].forEach((f,i)=>setTimeout(()=>beep(f,0.22,'sawtooth',0.1),i*180));},
+  bossKill:()=>{[523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>beep(f,0.14,'triangle',0.09),i*90));},
+};
 function vib(p){ if(!sv.muted && navigator.vibrate) try{navigator.vibrate(p);}catch(e){} }
 
 /* ================= 戦闘状態 ================= */
@@ -990,16 +1103,18 @@ function startStage(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show'));
   document.querySelectorAll('.overlay').forEach(s=>s.classList.remove('show'));
   document.getElementById('hud').classList.add('show');
-  document.getElementById('equipInfo').innerHTML =
-    curMain().name+' Lv'+curLv()+'<br>'+curSub().name+' Lv'+curSubLv()+'<br>'+curUlt().name+' Lv'+curUltLv();
+  document.getElementById('btnMain').textContent=curMain().name;
   showPads(true);
   refreshHud();
   requestAnimationFrame(loop);
 }
 function showPads(on){
-  ['btnMain','btnSub','btnUlt','btnPause'].forEach(id=>{
+  ['btnMain','btnSwap','btnSub','btnUlt','btnPause'].forEach(id=>{
     document.getElementById(id).style.display = on?'flex':'none';
   });
+  // 全画面・ミュートは常に表示
+  document.getElementById('btnFull').style.display='flex';
+  document.getElementById('btnMute').style.display='flex';
 }
 function spawnEnemy(type){
   const T=ENEMY_TYPES[type];
@@ -1009,7 +1124,7 @@ function spawnEnemy(type){
   for(const e of enemies) if(e.alive && e.x>W-40) x=Math.max(x, e.x+46);
   enemies.push({ type, x, y:GROUND, hp, maxHp:hp,
     spd:(S.spd*T.spd)*(W-DEF_X)/(8*60), // 1.00倍で端から防衛ラインまで約8秒
-    scale:1.15*T.size, walk:Math.random()*6, flash:0, alive:true,
+    scale:1.7*T.size, walk:Math.random()*6, flash:0, alive:true,
     shield:!!T.shield, shieldUsed:false, dying:0 });
   spawned++;
 }
@@ -1018,7 +1133,7 @@ function spawnBoss(){
   const B=BOSSES[S.boss-1];
   const spd=B.spd*(W-DEF_X)/(8*60);
   bossRef={ type:'normal', boss:true, bossId:B.id, x:W+60, y:GROUND,
-    hp:B.hp, maxHp:B.hp, spd, baseSpd:spd, scale:1.95, walk:0, flash:0, alive:true,
+    hp:B.hp, maxHp:B.hp, spd, baseSpd:spd, scale:2.4, walk:0, flash:0, alive:true,
     dying:0, reward:B.reward,
     // 行動用タイマー類
     t:0, accelT:0, summonT:300, invincT:0, invincCd:360, chargeT:0, chargeCd:0,
@@ -1031,7 +1146,7 @@ function spawnBoss(){
   document.getElementById('bossBarWrap').classList.add('show');
   addFloat(W/2,150,(B.final?'最終ボス出現!!':'ボス出現!'),'#ff5a4a');
   shake=Math.max(shake,10);
-  beep(60,0.6,'sawtooth',0.12);
+  SFX.bossAppear();
 }
 function summonMinions(list){
   for(const t of list){
@@ -1101,7 +1216,7 @@ function updateBoss(e){
         e.phase=4; e.baseSpd*=1.25;
         fx.push({kind:'gravity',life:40});
         addFloat(W/2,170,'第二形態!!','#ff4a4a');
-        shake=Math.max(shake,12); beep(45,0.8,'sawtooth',0.13);
+        shake=Math.max(shake,12); SFX.bossAppear();
       }
       if(e.phase>=2){ e.osc+=0.035; sp += Math.sin(e.osc)*e.baseSpd*1.2; }
       if(e.phase>=3 && --e.summonT<=0){ e.summonT=e.phase>=4?240:300; summonMinions(['fast','heavy']); }
@@ -1169,7 +1284,7 @@ function hitEnemy(e,dmg,death){
       document.getElementById('bossBarWrap').classList.remove('show');
       earned+=e.reward;
       addFloat(e.x,e.y-160,'ボス撃破! +$'+e.reward.toLocaleString(),'#ffd94a');
-      shake=Math.max(shake,14); beep(500,0.4,'triangle',0.1); vib([60,40,60,40,120]);
+      shake=Math.max(shake,14); SFX.bossKill(); vib([60,40,60,40,120]);
     }
     const band=COIN_TABLE[coinBand(stageId)];
     const r=band[e.type]||band.normal;
@@ -1189,13 +1304,13 @@ function fireMain(){
   shots++;
   switch(w.id){
     case 'handgun':
-      bullets.push({kind:'bullet',x:bx,y:by,vx:11,dmg,death:'handgun'}); SFX.shoot(); break;
+      bullets.push({kind:'bullet',x:bx,y:by,vx:11,dmg,death:'handgun'}); SFX.w_handgun(); break;
     case 'sonic':
-      bullets.push({kind:'sonic',x:bx,y:by,vx:7,dmg,death:'sonic',lv}); beep(240,0.12,'sine',0.06); break;
+      bullets.push({kind:'sonic',x:bx,y:by,vx:7,dmg,death:'sonic',lv}); SFX.w_sonic(); break;
     case 'shock':
-      bullets.push({kind:'shock',x:bx,y:by,vx:10,dmg,death:'shock',lv}); beep(880,0.06,'sawtooth',0.05); break;
+      bullets.push({kind:'shock',x:bx,y:by,vx:10,dmg,death:'shock',lv}); SFX.w_shock(); break;
     case 'freeze':
-      bullets.push({kind:'freeze',x:bx,y:by,vx:9,dmg,death:'freeze',lv}); beep(1200,0.08,'sine',0.05); break;
+      bullets.push({kind:'freeze',x:bx,y:by,vx:9,dmg,death:'freeze',lv}); SFX.w_freeze(); break;
     case 'shotgun':{
       // 扇状に発射。Lv5で本数と広がりが拡大
       const n=lv>=5?7:5, spread=lv>=5?3.2:2.2;
@@ -1203,7 +1318,7 @@ function fireMain(){
         bullets.push({kind:'pellet',x:bx,y:by,vx:9+Math.random()*2,
           vy:-spread+i*(spread*2/(n-1)),dmg:dmg*0.25,death:'shotgun',life:34});
       }
-      beep(140,0.15,'square',0.09); break;
+      SFX.w_shotgun(); break;
     }
     case 'beam':
       beamShot(dmg, lv>=5?5:3); break;
@@ -1213,12 +1328,12 @@ function fireMain(){
       gatlingRamp=Math.min(120,gatlingRamp+3);
       const mul=1+maxR*(gatlingRamp/120);
       bullets.push({kind:'bullet',x:bx,y:by+(Math.random()*10-5),vx:13,dmg:dmg*mul,death:'gatling'});
-      SFX.shoot(); break;
+      SFX.w_gatling(); break;
     }
     case 'plasma':
-      bullets.push({kind:'plasma',x:bx,y:by,vx:8,dmg,death:'plasma',lv}); beep(300,0.14,'sawtooth',0.06); break;
+      bullets.push({kind:'plasma',x:bx,y:by,vx:8,dmg,death:'plasma',lv}); SFX.w_plasma(); break;
     case 'grenade':
-      bullets.push({kind:'grenade',x:bx,y:by-10,vx:6.5,vy:-8.5,dmg,death:'grenade',lv}); beep(200,0.1,'square',0.05); break;
+      bullets.push({kind:'grenade',x:bx,y:by-10,vx:6.5,vy:-8.5,dmg,death:'grenade',lv}); SFX.w_grenade(); break;
     case 'rail':
       railShot(dmg);
       // Lv5: 一定確率(30%)で2連射
@@ -1231,20 +1346,20 @@ function beamShot(dmg,maxTargets){
   const targets=enemies.filter(e=>e.alive).sort((a,b)=>a.x-b.x).slice(0,maxTargets);
   targets.forEach(e=>hitEnemy(e,dmg,'beam'));
   fx.push({kind:'beam',y,life:8});
-  beep(1500,0.1,'sine',0.06);
+  SFX.w_beam();
 }
 function railShot(dmg){
   const y=GROUND-46;
   enemies.filter(e=>e.alive).forEach(e=>hitEnemy(e,dmg,'rail'));
   fx.push({kind:'rail',y,life:10});
   shake=Math.max(shake,7);
-  beep(70,0.25,'sawtooth',0.1);
+  SFX.w_rail();
 }
 function explodeAt(x,y,r,dmg,death){
   fx.push({kind:'ring',x,y,r,life:14});
   burst(x,y,'#ff8a3a',16);
   shake=Math.max(shake,6);
-  beep(90,0.2,'sawtooth',0.09);
+  SFX.explode();
   for(const e of enemies){ if(e.alive && Math.abs(e.x-x)<r) hitEnemy(e,dmg,death); }
 }
 function grenadeMini(b){
@@ -1269,33 +1384,33 @@ function fireSub(){
       const t=aliveNearest(1, PLAYER_X+260)[0];
       fx.push({kind:'punch',x:t?t.x:PLAYER_X+120,y:GROUND-52,life:10});
       if(t) hitEnemy(t,dmg,'punch');
-      beep(260,0.07,'square',0.07); break;
+      SFX.s_punch(); break;
     }
     case 'cardboard':
       bullets.push({kind:'sub_box',x:bx,y:by,vx:8,dmg,stun:Math.round(w.stun[lv-1]*60)});
-      beep(180,0.08,'square',0.05); break;
+      SFX.s_box(); break;
     case 'film':
       bullets.push({kind:'sub_film',x:bx,y:by,vx:9,dmg,bind:Math.round(w.bind[lv-1]*60)});
-      beep(700,0.08,'sine',0.05); break;
+      SFX.s_film(); break;
     case 'handlift':{
       const t=aliveNearest(1, PLAYER_X+300)[0];
       fx.push({kind:'lift',x:t?t.x:PLAYER_X+150,life:14});
       if(t){ hitEnemy(t,dmg,'handlift'); if(t.alive) t.x=Math.min(W-16,t.x+40); }
-      beep(150,0.12,'square',0.07); break;
+      SFX.s_handlift(); break;
     }
     case 'pallet':
       bullets.push({kind:'sub_pallet',x:bx,y:by,vx:8,dmg,pierce:2,hitList:[]});
-      beep(160,0.1,'square',0.06); break;
+      SFX.s_pallet(); break;
     case 'katana':{
       const ts=aliveNearest(2, PLAYER_X+220);
       fx.push({kind:'slash',x:PLAYER_X+120,y:GROUND-58,life:10});
       ts.forEach(t=>hitEnemy(t,dmg,'katana'));
-      beep(1000,0.06,'square',0.06); break;
+      SFX.s_katana(); break;
     }
     case 'chainsaw':{
       const t=aliveNearest(1, PLAYER_X+240)[0];
       if(t) dots.push({e:t,left:w.hits||5,timer:1,dmg});
-      beep(120,0.3,'sawtooth',0.07); break;
+      SFX.s_chainsaw(); break;
     }
     case 'hammer':{
       const t=aliveNearest(1, PLAYER_X+260)[0];
@@ -1304,12 +1419,12 @@ function fireSub(){
       shake=Math.max(shake,8);
       if(t) hitEnemy(t,dmg,'hammer');
       for(const o of enemies){ if(o.alive && o!==t && Math.abs(o.x-hx)<80) hitEnemy(o,dmg*0.5,'hammer'); }
-      beep(80,0.25,'sawtooth',0.1); break;
+      SFX.s_hammer(); break;
     }
     case 'barrier':
       barrierT=Math.round(w.dur[lv-1]*60);
       barrierMul=w.reflect[lv-1];
-      beep(500,0.15,'sine',0.06); break;
+      SFX.s_barrier(); break;
   }
 }
 /* ================= 必殺技 ================= */
@@ -1323,7 +1438,7 @@ function fireUlt(){
     case 'flame':{
       fx.push({kind:'flame',life:36});
       enemies.filter(e=>e.alive && e.x<=PLAYER_X+340).forEach(e=>hitEnemy(e,dmg,'flame'));
-      beep(110,0.5,'sawtooth',0.1); break;
+      SFX.u_flame(); break;
     }
     case 'rocket':{
       // 一番敵が密集している地点で大爆発(Lv5で範囲125%)
@@ -1336,25 +1451,25 @@ function fireUlt(){
       fx.push({kind:'ring',x:cx,y:GROUND-60,r,life:16});
       burst(cx,GROUND-60,'#ff8a3a',24);
       enemies.filter(e=>e.alive&&Math.abs(e.x-cx)<r).forEach(e=>hitEnemy(e,dmg,'rocket'));
-      beep(70,0.4,'sawtooth',0.11); break;
+      SFX.u_rocket(); break;
     }
     case 'tornado':
       sweeps.push({kind:'tornado',x:PLAYER_X+50,vx:6.5,dmg,hitList:[]});
-      beep(200,0.5,'sine',0.08); break;
+      SFX.u_tornado(); break;
     case 'gravity':{
       fx.push({kind:'gravity',life:44});
       enemies.filter(e=>e.alive).forEach(e=>hitEnemy(e,dmg,'gravity'));
-      beep(60,0.6,'sine',0.1); break;
+      SFX.u_gravity(); break;
     }
     case 'forklift':
       sweeps.push({kind:'forklift',x:PLAYER_X-40,vx:11,dmg,hitList:[]});
-      beep(130,0.4,'square',0.09); break;
+      SFX.u_forklift(); break;
     case 'meteor':{
       // 防衛ラインから画面の area% の範囲に隕石(Lv5で100%)
       const range=(W-DEF_X)*w.area[lv-1];
       for(let i=0;i<6;i++) fx.push({kind:'meteor',x:DEF_X+40+Math.random()*range,life:30+i*5});
       enemies.filter(e=>e.alive && e.x<=DEF_X+range).forEach(e=>hitEnemy(e,dmg,'meteor'));
-      beep(50,0.7,'sawtooth',0.12); break;
+      SFX.u_meteor(); break;
     }
   }
 }
@@ -1615,7 +1730,7 @@ function draw(){
   for(const e of enemies){
     if(!e.alive){ drawDeadEnemy(e); continue; }
     const ey = e.y + (e.yOff||0);
-    drawEnemyArt(ctx,e.x,ey,-1,e.walk,charCfg.enemy,e.flash,e.scale,e.type);
+    drawEnemyArt(ctx,e.x,ey,-1,e.walk,cfgFor(e),e.flash,e.scale,e.type);
     if(e.boss){
       // BOSSラベル
       ctx.fillStyle='#ff5a4a'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center';
@@ -1816,10 +1931,16 @@ function draw(){
   ctx.restore();
 }
 
-/* ================= 武器ごとの倒れ方(10種) ================= */
+/* 敵の見た目設定を返す(ボスは専用枠、無ければ種別枠) */
+function cfgFor(e){
+  if(e.boss) return (charCfg.boss.faceImg||charCfg.boss.bodyImg) ? charCfg.boss : charCfg.heavy;
+  return charCfg[e.type]||charCfg.normal;
+}
+
+/* ================= 武器ごとの倒れ方(25種) ================= */
 function drawDeadEnemy(e){
   const k=e.deathKind||'handgun', t=e.dying, D=DEATH_DUR[k]||45, p=Math.min(1,t/D);
-  const cfg=charCfg.enemy;
+  const cfg=cfgFor(e);
   ctx.save();
   switch(k){
     case 'handgun':{
@@ -2402,6 +2523,122 @@ function renderShop(){
 document.querySelectorAll('.shop-tab').forEach(b=>{
   b.onclick=()=>{ shopTab=b.dataset.tab; SFX.tap(); renderShop(); };
 });
+/* ================= 全画面(Android/PC/iPhone) ================= */
+function isFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement; }
+// iPhoneはOS側の制限でFullscreen APIが使えない(どのブラウザでも不可)
+function fullscreenSupported(){
+  const el=document.documentElement;
+  return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+}
+function isStandalone(){
+  return window.navigator.standalone === true ||
+         (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+function toggleFullscreen(){
+  if(!fullscreenSupported()){
+    if(isStandalone()) alert('すでに全画面で起動しています。端末を横向きにすると広く表示されます。');
+    else document.getElementById('ovFsHelp').classList.add('show');
+    return;
+  }
+  const el=document.documentElement;
+  if(!isFullscreen()){
+    const req=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(req){
+      const p=req.call(el);
+      if(p&&p.catch) p.catch(()=>{ document.getElementById('ovFsHelp').classList.add('show'); });
+    }
+    if(screen.orientation&&screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
+  } else {
+    const ex=document.exitFullscreen||document.webkitExitFullscreen;
+    if(ex) ex.call(document).catch(()=>{});
+    if(screen.orientation&&screen.orientation.unlock){ try{screen.orientation.unlock();}catch(e){} }
+  }
+}
+document.getElementById('btnFull').onclick=toggleFullscreen;
+document.getElementById('fsHelpClose').onclick=()=>document.getElementById('ovFsHelp').classList.remove('show');
+document.addEventListener('fullscreenchange', ()=>{ fitCanvas(); setTimeout(fitCanvas,120); });
+document.addEventListener('webkitfullscreenchange', ()=>{ fitCanvas(); setTimeout(fitCanvas,120); });
+
+/* ミュート */
+function refreshMute(){ document.getElementById('btnMute').textContent = sv.muted?'🔇':'🔊'; }
+document.getElementById('btnMute').onclick=()=>{ sv.muted=!sv.muted; save(); refreshMute(); if(!sv.muted) SFX.tap(); };
+
+/* ⑦ 武器切替(持っているメイン武器を順番に持ちかえる) */
+function ownedMains(){ return MAINS.filter(w=>sv.main[w.id] && sv.main[w.id].own); }
+document.getElementById('btnSwap').onclick=()=>{
+  const list=ownedMains();
+  if(list.length<=1){ addFloat(PLAYER_X,GROUND-120,'他の武器がありません','#8fa5c4'); return; }
+  const i=list.findIndex(w=>w.id===sv.eqMain);
+  sv.eqMain=list[(i+1)%list.length].id;
+  save(); gatlingRamp=0; fireCd=0;
+  SFX.weaponSwitch();
+  addFloat(PLAYER_X,GROUND-120,curMain().name+' Lv'+curLv(),'#ffd94a');
+  refreshHud();
+};
+
+/* ================= データのバックアップ =================
+   v2と同じ「PI1-」+ base64 形式。写真は含まれない。 */
+function encodeSave(){
+  const json=JSON.stringify(sv);
+  // 日本語を含まないが、念のためUTF-8安全にbase64化する
+  const b64=btoa(unescape(encodeURIComponent(json)));
+  return 'PI1-'+b64;
+}
+function decodeSave(code){
+  const c=String(code||'').replace(/\s/g,'');
+  if(!c) throw new Error('コードが空です');
+  if(c.indexOf('PI1-')!==0) throw new Error('コードの形式が違います(PI1- で始まる必要があります)');
+  let json;
+  try{ json=decodeURIComponent(escape(atob(c.slice(4)))); }
+  catch(e){ throw new Error('コードが壊れています。一部が欠けていないか確認してください'); }
+  let o;
+  try{ o=JSON.parse(json); }catch(e){ throw new Error('コードの中身を読めませんでした'); }
+  if(!o || typeof o!=='object') throw new Error('コードの中身が正しくありません');
+  return o;
+}
+document.getElementById('genCode').onclick=()=>{
+  document.getElementById('codeOut').value=encodeSave();
+  SFX.tap();
+};
+document.getElementById('copyCode').onclick=async()=>{
+  const t=document.getElementById('codeOut');
+  if(!t.value){ t.value=encodeSave(); }
+  try{
+    await navigator.clipboard.writeText(t.value);
+    alert('コピーしました');
+  }catch(e){
+    t.select(); t.setSelectionRange(0,99999);
+    try{ document.execCommand('copy'); alert('コピーしました'); }
+    catch(e2){ alert('コピーできませんでした。長押しして手動でコピーしてください'); }
+  }
+};
+document.getElementById('pasteCode').onclick=async()=>{
+  try{
+    const t=await navigator.clipboard.readText();
+    document.getElementById('codeIn').value=t;
+  }catch(e){
+    alert('貼り付けできませんでした。入力らんを長押しして貼り付けてください');
+  }
+};
+document.getElementById('restoreCode').onclick=()=>{
+  const raw=document.getElementById('codeIn').value;
+  let o;
+  try{ o=decodeSave(raw); }
+  catch(e){ alert('復元できません\n\n'+e.message); return; }
+  if(!confirm('今の進み具合は上書きされて消えます。復元しますか?')) return;
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(o)); }catch(e){}
+  sv=load(); save();   // load()側の検証を通す(壊れた値は既定値に補正される)
+  refreshMute();
+  showScreen('scrTitle');
+  SFX.levelup();
+  alert('復元しました');
+};
+document.getElementById('goBackup').onclick=()=>{
+  SFX.tap(); showScreen('scrBackup');
+  document.getElementById('codeOut').value=''; document.getElementById('codeIn').value='';
+};
+document.getElementById('backupBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
+
 /* ================= 設定 ================= */
 function renderSettings(){
   document.querySelectorAll('[data-fx]').forEach(b=>b.classList.toggle('on', b.dataset.fx===sv.fx));
@@ -2430,13 +2667,14 @@ document.getElementById('shopBack').onclick=()=>{ SFX.tap(); showScreen('scrTitl
 
 document.getElementById('goStages').onclick=()=>{ SFX.tap(); showScreen('scrStages'); renderStages(); };
 document.getElementById('stagesBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
-document.getElementById('goPhoto').onclick=()=>{ SFX.tap(); showScreen('scrPhoto'); drawPrevAll(); };
+document.getElementById('goPhoto').onclick=()=>{ SFX.tap(); showScreen('scrPhoto'); buildPhotoCards(); drawPrevAll(); };
 document.getElementById('photoBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
 document.getElementById('resNext').onclick=()=>{ if(stageId<30) startStage(stageId+1); };
 document.getElementById('resRetry').onclick=()=>{ startStage(stageId); };
 document.getElementById('resStages').onclick=()=>{ showScreen('scrStages'); renderStages(); };
 
 showPads(false);
+refreshMute();
 refreshTitle();
 </script>
 </body>
