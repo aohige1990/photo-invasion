@@ -117,6 +117,10 @@
   .shop-btn.buy{background:var(--ui);color:#3a2c00;}
   .shop-btn.eq{background:var(--green);color:#08240f;}
   .shop-btn:disabled{opacity:.4;cursor:default;}
+  .shop-tabs{display:flex;gap:6px;width:min(560px,94vw);}
+  .shop-tab{flex:1;background:#233650;color:#8fa5c4;border:2px solid #3d5270;border-radius:10px;
+    padding:9px 4px;font-size:13px;font-weight:bold;cursor:pointer;}
+  .shop-tab.on{background:var(--ui);color:#3a2c00;border-color:var(--ui);}
 
   /* 写真設定 */
   .photo-card{background:#1b2b44;border:2px solid #34496b;border-radius:14px;
@@ -204,8 +208,13 @@
 
 <!-- ショップ(メイン武器) -->
 <div class="screen" id="scrShop" style="justify-content:flex-start;padding-top:2vh;">
-  <h1 style="font-size:clamp(17px,4.5vw,24px);">ショップ(メイン武器)</h1>
+  <h1 style="font-size:clamp(17px,4.5vw,24px);">ショップ</h1>
   <div class="coin-badge" id="shopCoins">$0</div>
+  <div class="shop-tabs">
+    <button class="shop-tab on" data-tab="main">メイン</button>
+    <button class="shop-tab" data-tab="sub">サブ</button>
+    <button class="shop-tab" data-tab="ult">必殺技</button>
+  </div>
   <div id="shopList"></div>
   <button class="btn sub" id="shopBack">タイトルへ</button>
 </div>
@@ -400,15 +409,66 @@ const stageOf = id => STAGES[id-1];
 const mainOf  = id => MAINS.find(m=>m.id===id);
 const UP_COST_MUL=[1,2,4,7];
 const upgradeCost=(base,fromLv)=>base*UP_COST_MUL[fromLv-1];
-/* 武器ごとの倒れ方の再生フレーム数 */
-const DEATH_DUR={handgun:45,sonic:55,shock:55,freeze:60,shotgun:50,beam:32,gatling:55,plasma:66,grenade:72,rail:30};
+
+/* --- サブ武器(9種) cd=待ち時間(秒) --- */
+const SUBS = [
+  { id:'punch', name:'パンチ', order:1, basePrice:400, unlockPrice:0,
+    dmg:[12,14,16,19,23], cd:[3.0,2.8,2.6,2.3,2.1], death:'punch', ability:'素早く殴る' },
+  { id:'cardboard', name:'段ボール箱', order:2, basePrice:500, unlockPrice:2000,
+    dmg:[8,9,11,13,15], cd:[8.0,7.4,6.8,6.2,5.5], stun:[1.5,1.7,1.9,2.2,2.5],
+    death:'cardboard', ability:'頭にかぶせて動きを止める' },
+  { id:'film', name:'ストレッチフィルム', order:3, basePrice:700, unlockPrice:3500,
+    dmg:[10,12,14,16,19], cd:[9.0,8.3,7.6,6.9,6.2], bind:[2.0,2.3,2.6,3.0,3.5],
+    death:'film', ability:'全身を巻いて拘束する' },
+  { id:'handlift', name:'ハンドリフト', order:4, basePrice:1100, unlockPrice:6000,
+    dmg:[25,29,34,40,48], cd:[8.0,7.4,6.8,6.2,5.5], death:'handlift', ability:'突進して持ち上げる' },
+  { id:'pallet', name:'空パレット投げ', order:5, basePrice:1300, unlockPrice:8000,
+    dmg:[32,37,43,51,61], cd:[7.0,6.5,5.9,5.4,4.8], death:'pallet', ability:'パレットを投げつける(2体まで貫通)' },
+  { id:'katana', name:'刀', order:6, basePrice:1600, unlockPrice:11000,
+    dmg:[45,52,61,72,86], cd:[6.0,5.6,5.1,4.7,4.1], death:'katana', ability:'近くの敵2体を一閃' },
+  { id:'chainsaw', name:'チェーンソー', order:7, basePrice:2000, unlockPrice:15000,
+    dmg:[12,14,16,19,23], hits:5, cd:[9.0,8.3,7.6,6.9,6.2], death:'chainsaw', ability:'5回連続ヒット' },
+  { id:'hammer', name:'巨大ハンマー', order:8, basePrice:2600, unlockPrice:22000,
+    dmg:[80,92,108,128,152], cd:[11.0,10.2,9.4,8.5,7.6], death:'hammer', ability:'一撃+周囲にも半分の威力' },
+  { id:'barrier', name:'バリア', order:9, basePrice:3200, unlockPrice:30000,
+    reflect:[1.00,1.15,1.35,1.60,1.90], dur:[1.5,1.7,2.0,2.3,2.7],
+    cd:[15.0,13.9,12.7,11.5,10.3], death:'barrier', ability:'防衛ラインに壁を張り敵を弾き飛ばす' },
+];
+/* --- 必殺技(6種) gauge=必要ゲージ --- */
+const ULTS = [
+  { id:'flame', name:'火炎放射器', order:1, basePrice:800, unlockPrice:0,
+    dmg:[120,138,162,192,228], gauge:[100,94,88,81,75], death:'flame', ability:'前方を焼き払う' },
+  { id:'rocket', name:'ロケットランチャー', order:2, basePrice:1500, unlockPrice:5000,
+    dmg:[160,184,216,256,304], gauge:[110,103,96,90,83], area:[1.00,1.05,1.10,1.15,1.25],
+    death:'rocket', ability:'密集地点を大爆発' },
+  { id:'tornado', name:'竜巻砲', order:3, basePrice:2200, unlockPrice:10000,
+    dmg:[190,219,257,304,361], gauge:[120,113,105,98,90], death:'tornado', ability:'竜巻が横断して巻き上げる' },
+  { id:'gravity', name:'重力銃', order:4, basePrice:3000, unlockPrice:18000,
+    dmg:[230,265,311,368,437], gauge:[130,122,114,106,98], death:'gravity', ability:'全ての敵を浮かせて叩きつける' },
+  { id:'forklift', name:'フォークリフト突進', order:5, basePrice:3800, unlockPrice:28000,
+    dmg:[280,322,378,448,532], gauge:[140,131,123,114,105], death:'forklift', ability:'全てをすくって運び去る' },
+  { id:'meteor', name:'隕石砲', order:6, basePrice:5000, unlockPrice:40000,
+    dmg:[350,403,473,560,665], gauge:[150,140,132,122,113], area:[0.70,0.75,0.80,0.90,1.00],
+    death:'meteor', ability:'広範囲に隕石を落とす' },
+];
+const subOf = id => SUBS.find(w=>w.id===id);
+const ultOf = id => ULTS.find(w=>w.id===id);
+
+/* 武器ごとの倒れ方の再生フレーム数(25種) */
+const DEATH_DUR={
+  handgun:45,sonic:55,shock:55,freeze:60,shotgun:50,beam:32,gatling:55,plasma:66,grenade:72,rail:30,
+  punch:50,cardboard:62,film:60,handlift:55,pallet:55,katana:55,chainsaw:62,hammer:55,barrier:45,
+  flame:70,rocket:84,tornado:60,gravity:66,forklift:50,meteor:76,
+};
 
 /* ================= 保存 ================= */
 const SAVE_KEY='photoInvasion30';
 const DEFAULT_SAVE={
   coins:0,
   main:{handgun:{own:true,lv:1}},
-  eqMain:'handgun',
+  sub:{punch:{own:true,lv:1}},
+  ult:{flame:{own:true,lv:1}},
+  eqMain:'handgun', eqSub:'punch', eqUlt:'flame',
   cleared:{},           // {stageId: {rank, score, count, day, dayCount}}
   unlocked:1,           // 解放済み最大ステージ
   fx:'normal', muted:false,
@@ -429,6 +489,21 @@ function load(){
     }
     if(!s.main.handgun) s.main.handgun={own:true,lv:1};
     if(!mainOf(s.eqMain) || !s.main[s.eqMain] || !s.main[s.eqMain].own) s.eqMain='handgun';
+    // サブ武器・必殺技も同様に検証
+    if(!s.sub || typeof s.sub!=='object') s.sub={};
+    for(const k of Object.keys(s.sub)){
+      const e=s.sub[k];
+      if(!subOf(k) || !e || typeof e.lv!=='number' || e.lv<1 || e.lv>5) delete s.sub[k];
+    }
+    if(!s.sub.punch) s.sub.punch={own:true,lv:1};
+    if(!subOf(s.eqSub) || !s.sub[s.eqSub] || !s.sub[s.eqSub].own) s.eqSub='punch';
+    if(!s.ult || typeof s.ult!=='object') s.ult={};
+    for(const k of Object.keys(s.ult)){
+      const e=s.ult[k];
+      if(!ultOf(k) || !e || typeof e.lv!=='number' || e.lv<1 || e.lv>5) delete s.ult[k];
+    }
+    if(!s.ult.flame) s.ult.flame={own:true,lv:1};
+    if(!ultOf(s.eqUlt) || !s.ult[s.eqUlt] || !s.ult[s.eqUlt].own) s.eqUlt='flame';
     if(typeof s.unlocked!=='number' || s.unlocked<1 || s.unlocked>30) s.unlocked=1;
     if(!s.cleared || typeof s.cleared!=='object') s.cleared={};
     return s;
@@ -820,6 +895,7 @@ function vib(p){ if(!sv.muted && navigator.vibrate) try{navigator.vibrate(p);}ca
 let running=false, paused=false, stageId=1, S=null;
 let enemies=[], bullets=[], parts=[], floats=[], fx=[];
 let gatlingRamp=0, pendingRail=0, pendingRailDmg=0;
+let subCd=0, ultGauge=0, subUses=0, ultUses=0, dots=[], sweeps=[], barrierT=0, barrierMul=1;
 let defHp=10, defMax=10, timeLeft=60*60, waves=[], waveIdx=0, waveTimer=0;
 let spawnQueue=[], spawned=0, killed=0, leaked=0, earned=0;
 let combo=0, maxCombo=0, comboTimer=0, shots=0, hits=0, damageTaken=0;
@@ -829,6 +905,11 @@ function curMain(){ return mainOf(sv.eqMain); }
 function curLv(){ const e=sv.main[sv.eqMain]; return e?e.lv:1; }
 function mainDmg(){ const w=curMain(); return w.dmg[curLv()-1]; }
 function mainRate(){ const w=curMain(); return w.rate[curLv()-1]; }
+function curSub(){ return subOf(sv.eqSub); }
+function curSubLv(){ const e=sv.sub[sv.eqSub]; return e?e.lv:1; }
+function curUlt(){ return ultOf(sv.eqUlt); }
+function curUltLv(){ const e=sv.ult[sv.eqUlt]; return e?e.lv:1; }
+function ultNeed(){ return curUlt().gauge[curUltLv()-1]; }
 
 /* ウェーブ分割: 敵構成を N ウェーブへ均等に配分する */
 function buildWaves(st){
@@ -847,6 +928,7 @@ function startStage(id){
   stageId=id; S=stageOf(id);
   enemies=[]; bullets=[]; parts=[]; floats=[]; fx=[];
   gatlingRamp=0; pendingRail=0; pendingRailDmg=0;
+  subCd=0; ultGauge=0; subUses=0; ultUses=0; dots=[]; sweeps=[]; barrierT=0;
   defMax=defenseHp(id); defHp=defMax;
   timeLeft=60*60; waves=buildWaves(S); waveIdx=0; waveTimer=0;
   spawnQueue=waves[0].slice(); spawned=0; killed=0; leaked=0; earned=0;
@@ -856,7 +938,8 @@ function startStage(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show'));
   document.querySelectorAll('.overlay').forEach(s=>s.classList.remove('show'));
   document.getElementById('hud').classList.add('show');
-  document.getElementById('equipInfo').textContent = curMain().name+' Lv'+curLv();
+  document.getElementById('equipInfo').innerHTML =
+    curMain().name+' Lv'+curLv()+'<br>'+curSub().name+' Lv'+curSubLv()+'<br>'+curUlt().name+' Lv'+curUltLv();
   showPads(true);
   refreshHud();
   requestAnimationFrame(loop);
@@ -899,6 +982,10 @@ function hitEnemy(e,dmg,death){
     else if(e.deathKind==='grenade'){ e.dvx=3; e.dvy=-6.5; e.rot=0; }
     else if(e.deathKind==='gatling'){ e.rot=0; }
     killed++; combo++; comboTimer=150; maxCombo=Math.max(maxCombo,combo);
+    // 必殺ゲージ: 敵種ごとの量を加算、コンボ10の倍数で+10
+    ultGauge += (ENEMY_TYPES[e.type]||{gauge:3}).gauge;
+    if(combo>0 && combo%10===0){ ultGauge+=10; addFloat(e.x,e.y-124,'ゲージ+10','#5be36b'); }
+    ultGauge=Math.min(ultGauge, 999);
     const band=COIN_TABLE[coinBand(stageId)];
     const r=band[e.type]||band.normal;
     let coin=Math.round(r[0]+Math.random()*(r[1]-r[0]));
@@ -982,6 +1069,110 @@ function grenadeMini(b){
     bullets.push({kind:'grenade',x:b.x,y:GROUND-40,vx: 3.5,vy:-6,dmg:b.dmg*0.3,lv:0,mini:true,death:'grenade'});
   }
 }
+function aliveNearest(n, maxX){
+  return enemies.filter(e=>e.alive && (maxX===undefined || e.x<=maxX)).sort((a,b)=>a.x-b.x).slice(0,n);
+}
+/* ================= サブ武器 ================= */
+function fireSub(){
+  const w=curSub(), lv=curSubLv();
+  const dmg=w.dmg?w.dmg[lv-1]:0;
+  subCd=Math.round(w.cd[lv-1]*60);
+  subUses++;
+  const bx=PLAYER_X+26, by=GROUND-40;
+  switch(w.id){
+    case 'punch':{
+      const t=aliveNearest(1, PLAYER_X+260)[0];
+      fx.push({kind:'punch',x:t?t.x:PLAYER_X+120,y:GROUND-52,life:10});
+      if(t) hitEnemy(t,dmg,'punch');
+      beep(260,0.07,'square',0.07); break;
+    }
+    case 'cardboard':
+      bullets.push({kind:'sub_box',x:bx,y:by,vx:8,dmg,stun:Math.round(w.stun[lv-1]*60)});
+      beep(180,0.08,'square',0.05); break;
+    case 'film':
+      bullets.push({kind:'sub_film',x:bx,y:by,vx:9,dmg,bind:Math.round(w.bind[lv-1]*60)});
+      beep(700,0.08,'sine',0.05); break;
+    case 'handlift':{
+      const t=aliveNearest(1, PLAYER_X+300)[0];
+      fx.push({kind:'lift',x:t?t.x:PLAYER_X+150,life:14});
+      if(t){ hitEnemy(t,dmg,'handlift'); if(t.alive) t.x=Math.min(W-16,t.x+40); }
+      beep(150,0.12,'square',0.07); break;
+    }
+    case 'pallet':
+      bullets.push({kind:'sub_pallet',x:bx,y:by,vx:8,dmg,pierce:2,hitList:[]});
+      beep(160,0.1,'square',0.06); break;
+    case 'katana':{
+      const ts=aliveNearest(2, PLAYER_X+220);
+      fx.push({kind:'slash',x:PLAYER_X+120,y:GROUND-58,life:10});
+      ts.forEach(t=>hitEnemy(t,dmg,'katana'));
+      beep(1000,0.06,'square',0.06); break;
+    }
+    case 'chainsaw':{
+      const t=aliveNearest(1, PLAYER_X+240)[0];
+      if(t) dots.push({e:t,left:w.hits||5,timer:1,dmg});
+      beep(120,0.3,'sawtooth',0.07); break;
+    }
+    case 'hammer':{
+      const t=aliveNearest(1, PLAYER_X+260)[0];
+      const hx=t?t.x:PLAYER_X+150;
+      fx.push({kind:'hammer',x:hx,life:16});
+      shake=Math.max(shake,8);
+      if(t) hitEnemy(t,dmg,'hammer');
+      for(const o of enemies){ if(o.alive && o!==t && Math.abs(o.x-hx)<80) hitEnemy(o,dmg*0.5,'hammer'); }
+      beep(80,0.25,'sawtooth',0.1); break;
+    }
+    case 'barrier':
+      barrierT=Math.round(w.dur[lv-1]*60);
+      barrierMul=w.reflect[lv-1];
+      beep(500,0.15,'sine',0.06); break;
+  }
+}
+/* ================= 必殺技 ================= */
+function fireUlt(){
+  const w=curUlt(), lv=curUltLv();
+  const dmg=w.dmg[lv-1];
+  ultGauge-=ultNeed(); if(ultGauge<0) ultGauge=0;
+  ultUses++;
+  shake=Math.max(shake,9);
+  switch(w.id){
+    case 'flame':{
+      fx.push({kind:'flame',life:36});
+      enemies.filter(e=>e.alive && e.x<=PLAYER_X+340).forEach(e=>hitEnemy(e,dmg,'flame'));
+      beep(110,0.5,'sawtooth',0.1); break;
+    }
+    case 'rocket':{
+      // 一番敵が密集している地点で大爆発(Lv5で範囲125%)
+      const r=130*(w.area[lv-1]);
+      let best=null,bc=-1;
+      for(const e of enemies){ if(!e.alive) continue;
+        const c=enemies.filter(o=>o.alive&&Math.abs(o.x-e.x)<r).length;
+        if(c>bc){bc=c;best=e;} }
+      const cx=best?best.x:W/2;
+      fx.push({kind:'ring',x:cx,y:GROUND-60,r,life:16});
+      burst(cx,GROUND-60,'#ff8a3a',24);
+      enemies.filter(e=>e.alive&&Math.abs(e.x-cx)<r).forEach(e=>hitEnemy(e,dmg,'rocket'));
+      beep(70,0.4,'sawtooth',0.11); break;
+    }
+    case 'tornado':
+      sweeps.push({kind:'tornado',x:PLAYER_X+50,vx:6.5,dmg,hitList:[]});
+      beep(200,0.5,'sine',0.08); break;
+    case 'gravity':{
+      fx.push({kind:'gravity',life:44});
+      enemies.filter(e=>e.alive).forEach(e=>hitEnemy(e,dmg,'gravity'));
+      beep(60,0.6,'sine',0.1); break;
+    }
+    case 'forklift':
+      sweeps.push({kind:'forklift',x:PLAYER_X-40,vx:11,dmg,hitList:[]});
+      beep(130,0.4,'square',0.09); break;
+    case 'meteor':{
+      // 防衛ラインから画面の area% の範囲に隕石(Lv5で100%)
+      const range=(W-DEF_X)*w.area[lv-1];
+      for(let i=0;i<6;i++) fx.push({kind:'meteor',x:DEF_X+40+Math.random()*range,life:30+i*5});
+      enemies.filter(e=>e.alive && e.x<=DEF_X+range).forEach(e=>hitEnemy(e,dmg,'meteor'));
+      beep(50,0.7,'sawtooth',0.12); break;
+    }
+  }
+}
 function onProjectileHit(b,e){
   switch(b.kind){
     case 'bullet':
@@ -1034,6 +1225,17 @@ function onProjectileHit(b,e){
       explodeAt(b.x,e.y-50, b.mini?50:90, b.dmg, 'grenade');
       grenadeMini(b);
       break;
+    case 'sub_box':
+      hitEnemy(e,b.dmg,'cardboard');
+      if(e.alive){ e.stunT=b.stun; e.boxed=b.stun; }
+      break;
+    case 'sub_film':
+      hitEnemy(e,b.dmg,'film');
+      if(e.alive){ e.stunT=b.bind; e.wrapped=b.bind; }
+      break;
+    case 'sub_pallet':
+      hitEnemy(e,b.dmg,'pallet');
+      break;
   }
 }
 function leak(e){
@@ -1064,6 +1266,36 @@ function update(){
     waveTimer=60;
   }
 
+  // サブ武器の待ち時間
+  if(subCd>0) subCd--;
+  // チェーンソーの連続ヒット
+  dots=dots.filter(d=>{
+    if(!d.e.alive) return false;
+    if(--d.timer<=0){ hitEnemy(d.e,d.dmg,'chainsaw'); d.left--; d.timer=8; }
+    return d.left>0 && d.e.alive;
+  });
+  // 竜巻・フォークリフトの横断攻撃
+  sweeps=sweeps.filter(sw=>{
+    sw.x+=sw.vx;
+    for(const e of enemies){
+      if(e.alive && !sw.hitList.includes(e) && Math.abs(e.x-sw.x)<48){
+        sw.hitList.push(e);
+        hitEnemy(e,sw.dmg, sw.kind==='tornado'?'tornado':'forklift');
+      }
+    }
+    return sw.x<W+90;
+  });
+  // バリア
+  if(barrierT>0){
+    barrierT--;
+    for(const e of enemies){
+      if(e.alive && e.x<=DEF_X+58){
+        hitEnemy(e, Math.round(25*barrierMul), 'barrier');
+        if(e.alive){ e.x=DEF_X+170; addFloat(e.x,e.y-100,'はじいた!','#5be36b'); }
+      }
+    }
+  }
+
   // 射撃
   if(fireCd>0) fireCd--;
   if(fireHeld && fireCd<=0){ fireMain(); }
@@ -1079,6 +1311,13 @@ function update(){
     for(const e of enemies){
       if(!e.alive) continue;
       if(Math.abs(b.x-e.x)<20*e.scale && b.y>e.y-100*e.scale && b.y<e.y-6){
+        if(b.kind==='sub_pallet'){
+          // パレットは2体まで貫通する
+          if(b.hitList.includes(e)) continue;
+          onProjectileHit(b,e); b.hitList.push(e);
+          if(b.hitList.length>=b.pierce) return false;
+          continue;
+        }
         onProjectileHit(b,e); return false;
       }
     }
@@ -1110,11 +1349,34 @@ function update(){
           else if(e.dying===40){ burst(e.x,e.y-50,'#c77dff',24); shake=Math.max(shake,5); }
         }
         else if(k==='freeze'){ if(e.dying===45) burst(e.x,e.y-40,'#bfe6ff',20); }
+        else if(k==='punch'){ if(e.dying>16) e.rot=(e.rot||0)+0.35; }
+        else if(k==='cardboard'){ if(e.dying<30){ e.x+=Math.sin(e.dying*0.5)*2; } }
+        else if(k==='film'){ if(e.dying>12){ e.x+=2.2; e.rot=(e.rot||0)+0.3; } }
+        else if(k==='handlift'){ if(e.dying>8){ e.y-=1.2; e.x+=5; } }
+        else if(k==='pallet'){ if(e.dying>6) e.x+=6; }
+        else if(k==='katana'){ /* 遅れてずれる動きは描画側 */ }
+        else if(k==='chainsaw'){ if(e.dying>26){ e.rot=(e.rot||0)+0.45; e.y+=2.2; } }
+        else if(k==='barrier'){ e.x+=7; e.y-=1.5; e.rot=(e.rot||0)+0.3; }
+        else if(k==='rocket'){
+          if(e.dying<28) e.y-=14;                       // 真上へ打ち上がる
+          else if(e.dying===28) e.y=-140;
+          else if(e.dying>44 && e.y<GROUND) e.y=Math.min(GROUND, e.y+16);  // 落下して突き刺さる
+        }
+        else if(k==='tornado'){ e.rot=(e.rot||0)+0.55; e.y-=4; e.x+=Math.sin(e.dying*0.4)*3; }
+        else if(k==='gravity'){
+          if(e.dying<24) e.y-=2.4;
+          else if(e.y<GROUND){ e.y=Math.min(GROUND, e.y+18); if(e.y>=GROUND){ shake=Math.max(shake,4); } }
+        }
+        else if(k==='forklift'){ e.x+=8; }
+        else if(k==='meteor'){ if(e.dying===22){ burst(e.x,e.y-40,'#ff8a3a',18); shake=Math.max(shake,6); } }
       }
       continue;
     }
     if(e.flash>0) e.flash--;
+    if(e.boxed>0) e.boxed--;
+    if(e.wrapped>0) e.wrapped--;
     if(e.frozen>0){ e.frozen--; continue; }   // 凍結中は動かない
+    if(e.stunT>0){ e.stunT--; continue; }     // 段ボール・フィルムで停止中
     const sp = e.stagger>0 ? e.spd*0.4 : e.spd;  // ふらつき中は減速
     if(e.stagger>0) e.stagger--;
     e.x-=sp; e.walk+=0.12;
@@ -1167,6 +1429,20 @@ function draw(){
       const iw=52*e.scale, ih=104*e.scale;
       ctx.beginPath(); ctx.roundRect(e.x-iw/2,e.y-ih,iw,ih,8); ctx.fill(); ctx.stroke();
     }
+    // 段ボール(頭に箱)
+    if(e.boxed>0){
+      const bw2=34*e.scale;
+      ctx.fillStyle='#c9a06a'; ctx.fillRect(e.x-bw2/2,e.y-100*e.scale,bw2,bw2*0.8);
+      ctx.strokeStyle='#8a6a3a'; ctx.lineWidth=2; ctx.strokeRect(e.x-bw2/2,e.y-100*e.scale,bw2,bw2*0.8);
+    }
+    // フィルム(白い帯)
+    if(e.wrapped>0){
+      ctx.strokeStyle='rgba(230,240,255,.9)'; ctx.lineWidth=4;
+      for(let i=0;i<4;i++){
+        ctx.beginPath(); ctx.moveTo(e.x-20*e.scale,e.y-(20+i*22)*e.scale);
+        ctx.lineTo(e.x+20*e.scale,e.y-(30+i*22)*e.scale); ctx.stroke();
+      }
+    }
     // ふらつき表示(頭上のうずまき)
     if(e.stagger>0){
       ctx.strokeStyle='rgba(255,217,74,.9)'; ctx.lineWidth=2;
@@ -1208,9 +1484,47 @@ function draw(){
       ctx.beginPath(); ctx.arc(b.x,b.y,b.mini?5:8,0,Math.PI*2); ctx.fill();
     } else if(b.kind==='pellet'){
       ctx.fillStyle='#ffb43a'; ctx.fillRect(b.x-3,b.y-1.5,6,3);
+    } else if(b.kind==='sub_box'){
+      ctx.fillStyle='#c9a06a'; ctx.fillRect(b.x-9,b.y-9,18,18);
+      ctx.strokeStyle='#8a6a3a'; ctx.lineWidth=2; ctx.strokeRect(b.x-9,b.y-9,18,18);
+    } else if(b.kind==='sub_film'){
+      ctx.strokeStyle='#dbe6f5'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(b.x,b.y,7,0,Math.PI*2); ctx.stroke();
+    } else if(b.kind==='sub_pallet'){
+      ctx.fillStyle='#c9a06a';
+      ctx.fillRect(b.x-14,b.y-4,28,8);
+      ctx.fillStyle='#8a6a3a';
+      ctx.fillRect(b.x-14,b.y-4,6,8); ctx.fillRect(b.x-3,b.y-4,6,8); ctx.fillRect(b.x+8,b.y-4,6,8);
     } else {
       ctx.fillStyle='#ffd94a'; ctx.fillRect(b.x-5,b.y-2,10,4);
     }
+  }
+  // 横断攻撃
+  for(const sw of sweeps){
+    if(sw.kind==='tornado'){
+      ctx.strokeStyle='rgba(160,220,255,.85)'; ctx.lineWidth=4;
+      for(let i=0;i<4;i++){
+        const r=10+i*11, yy=GROUND-18-i*26;
+        ctx.beginPath(); ctx.ellipse(sw.x+Math.sin(performance.now()/90+i)*5,yy,r,8,0,0,Math.PI*2); ctx.stroke();
+      }
+    } else {
+      // フォークリフト
+      ctx.fillStyle='#ff8a3a';
+      ctx.fillRect(sw.x-34,GROUND-46,52,34);
+      ctx.fillStyle='#2c3e57';
+      ctx.beginPath(); ctx.arc(sw.x-22,GROUND-8,9,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sw.x+8,GROUND-8,9,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#dbe6f5';
+      ctx.fillRect(sw.x+18,GROUND-14,34,5);
+      ctx.fillRect(sw.x+18,GROUND-42,5,33);
+    }
+  }
+  // バリアの壁
+  if(barrierT>0){
+    ctx.globalAlpha=Math.min(1,barrierT/20)*0.7;
+    ctx.fillStyle='#5be36b';
+    ctx.fillRect(DEF_X+40,0,7,GROUND);
+    ctx.globalAlpha=1;
   }
   // 武器エフェクト
   for(const f of fx){
@@ -1236,6 +1550,42 @@ function draw(){
       ctx.beginPath(); ctx.moveTo(f.x1,f.y1);
       const mx=(f.x1+f.x2)/2, my=(f.y1+f.y2)/2+(Math.random()*16-8);
       ctx.lineTo(mx,my); ctx.lineTo(f.x2,f.y2); ctx.stroke();
+    } else if(f.kind==='punch'){
+      ctx.globalAlpha=f.life/10;
+      ctx.fillStyle='#ffd94a';
+      ctx.beginPath(); ctx.arc(f.x,f.y,14,0,Math.PI*2); ctx.fill();
+      ctx.font='bold 16px sans-serif'; ctx.fillStyle='#fff'; ctx.textAlign='center';
+      ctx.fillText('ゴッ',f.x,f.y-18);
+    } else if(f.kind==='slash'){
+      ctx.globalAlpha=f.life/10;
+      ctx.strokeStyle='#fff'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(f.x-46,f.y+34); ctx.lineTo(f.x+46,f.y-34); ctx.stroke();
+    } else if(f.kind==='lift'){
+      ctx.globalAlpha=f.life/14;
+      ctx.strokeStyle='#ffb43a'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(f.x-20,GROUND-8); ctx.lineTo(f.x+20,GROUND-8); ctx.stroke();
+    } else if(f.kind==='hammer'){
+      ctx.globalAlpha=f.life/16;
+      ctx.fillStyle='#8fa5c4';
+      ctx.fillRect(f.x-26,GROUND-96,52,34);
+      ctx.fillRect(f.x-4,GROUND-62,8,50);
+    } else if(f.kind==='flame'){
+      ctx.globalAlpha=Math.min(1,f.life/18)*0.8;
+      const g2=ctx.createLinearGradient(PLAYER_X,0,PLAYER_X+340,0);
+      g2.addColorStop(0,'rgba(255,90,40,.85)'); g2.addColorStop(1,'rgba(255,180,58,0)');
+      ctx.fillStyle=g2;
+      ctx.fillRect(PLAYER_X+20,GROUND-92,320,86);
+    } else if(f.kind==='gravity'){
+      ctx.globalAlpha=Math.min(1,f.life/22)*0.35;
+      ctx.fillStyle='#c77dff';
+      ctx.fillRect(0,0,W,GROUND);
+    } else if(f.kind==='meteor'){
+      ctx.globalAlpha=Math.min(1,f.life/16);
+      const my2=GROUND-60-f.life*7;
+      ctx.fillStyle='#ff8a3a';
+      ctx.beginPath(); ctx.arc(f.x,my2,11,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(255,138,58,.5)'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(f.x+9,my2-16); ctx.lineTo(f.x+22,my2-42); ctx.stroke();
     }
   }
   ctx.globalAlpha=1;
@@ -1364,6 +1714,178 @@ function drawDeadEnemy(e){
       }
       break;
     }
+    case 'punch':{
+      // 顔が横に伸び、回転して尻もちをつく
+      ctx.globalAlpha=1-p;
+      const stretch=t<16 ? 1+0.5*Math.sin(t*0.6) : 1;
+      ctx.translate(e.x,e.y-30); ctx.scale(stretch,1); ctx.rotate(e.rot||0); ctx.translate(-e.x,-(e.y-30));
+      drawEnemyArt(ctx,e.x,e.y-(t>16?10:0),-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'cardboard':{
+      // 頭から箱をかぶり、ふらふら歩いて倒れる
+      ctx.globalAlpha=1-p;
+      const fall=Math.max(0,(t-30))*0.06;
+      ctx.translate(e.x,e.y); ctx.rotate(Math.min(1.5,fall)); ctx.translate(-e.x,-e.y);
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk+t*0.3,cfg,0,e.scale,e.type);
+      const bw2=36*e.scale;
+      ctx.fillStyle='#c9a06a'; ctx.fillRect(e.x-bw2/2,e.y-102*e.scale,bw2,bw2*0.85);
+      ctx.strokeStyle='#8a6a3a'; ctx.lineWidth=2; ctx.strokeRect(e.x-bw2/2,e.y-102*e.scale,bw2,bw2*0.85);
+      break;
+    }
+    case 'film':{
+      // 全身を巻かれて動けず、横へ転がる
+      ctx.globalAlpha=1-p;
+      ctx.translate(e.x,e.y-40); ctx.rotate(e.rot||0); ctx.translate(-e.x,-(e.y-40));
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      ctx.strokeStyle='rgba(230,240,255,.95)'; ctx.lineWidth=5;
+      for(let i=0;i<5;i++){
+        ctx.beginPath(); ctx.moveTo(e.x-20*e.scale,e.y-(12+i*20)*e.scale);
+        ctx.lineTo(e.x+20*e.scale,e.y-(22+i*20)*e.scale); ctx.stroke();
+      }
+      break;
+    }
+    case 'handlift':{
+      // 荷物のように持ち上げられて運ばれる
+      ctx.globalAlpha=1-p*0.8;
+      drawEnemyArt(ctx,e.x,e.y,-1,0,cfg,0,e.scale,e.type);
+      ctx.fillStyle='#ffb43a';
+      ctx.fillRect(e.x-24*e.scale,e.y+2,48*e.scale,6);
+      ctx.fillStyle='#8a4f1c';
+      ctx.beginPath(); ctx.arc(e.x-14,e.y+13,5,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(e.x+14,e.y+13,5,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'pallet':{
+      // パレットに乗ったまま滑って退場
+      ctx.globalAlpha=1-p*0.7;
+      drawEnemyArt(ctx,e.x,e.y-8,-1,0,cfg,0,e.scale,e.type);
+      ctx.fillStyle='#c9a06a'; ctx.fillRect(e.x-26*e.scale,e.y-8,52*e.scale,8);
+      ctx.fillStyle='#8a6a3a';
+      ctx.fillRect(e.x-26*e.scale,e.y-8,9,8); ctx.fillRect(e.x-4,e.y-8,9,8); ctx.fillRect(e.x+18*e.scale-9,e.y-8,9,8);
+      break;
+    }
+    case 'katana':{
+      // 攻撃直後は立ったまま、少し遅れて斜めにずれて倒れる
+      if(t<18){
+        drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+        ctx.strokeStyle='rgba(255,255,255,'+(1-t/18)+')'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.moveTo(e.x-30,e.y-30); ctx.lineTo(e.x+30,e.y-86*e.scale); ctx.stroke();
+      } else {
+        ctx.globalAlpha=1-p;
+        const sl=(t-18)*0.05;
+        ctx.translate(e.x,e.y); ctx.rotate(Math.min(1.2,sl)); ctx.translate(-e.x,-e.y);
+        drawEnemyArt(ctx,e.x+(t-18)*0.8,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      }
+      break;
+    }
+    case 'chainsaw':{
+      // 激しく振動し、後退後に回転して地面へ埋まる
+      ctx.globalAlpha=1-p;
+      const jx=t<=26 ? (Math.random()*6-3) : 0;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0,0,W,GROUND+2); ctx.clip();   // 地面より下は描かない=埋まる表現
+      ctx.translate(e.x+jx,e.y-30); ctx.rotate(e.rot||0); ctx.translate(-(e.x+jx),-(e.y-30));
+      drawEnemyArt(ctx,e.x+jx,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      ctx.restore();
+      break;
+    }
+    case 'hammer':{
+      // 紙のように平たくなって床に張り付く
+      ctx.globalAlpha=1-p;
+      const sq=Math.max(0.08, 1-t*0.09);
+      ctx.translate(e.x,e.y); ctx.scale(Math.min(1.7,1+(1-sq)*0.7), sq); ctx.translate(-e.x,-e.y);
+      drawEnemyArt(ctx,e.x,e.y,-1,0,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'barrier':{
+      // 弾き飛ばされて吹き飛ぶ
+      ctx.globalAlpha=1-p;
+      ctx.translate(e.x,e.y-30); ctx.rotate(e.rot||0); ctx.translate(-e.x,-(e.y-30));
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'flame':{
+      // 黒いシルエットになり、煙を出して灰の山になる
+      if(t<44){
+        ctx.globalAlpha=1;
+        ctx.save();
+        drawEnemyArt(ctx,e.x,e.y,-1,0,cfg,0,e.scale,e.type);
+        ctx.globalCompositeOperation='source-atop';
+        ctx.restore();
+        // 上から黒シルエットを重ねる
+        ctx.globalAlpha=Math.min(1,t/12);
+        ctx.fillStyle='#1a1a1a';
+        ctx.beginPath(); ctx.ellipse(e.x,e.y-52*e.scale,22*e.scale,52*e.scale,0,0,Math.PI*2); ctx.fill();
+        if(t%3===0) parts.push({x:e.x+(Math.random()*20-10),y:e.y-100*e.scale,vx:0.3,vy:-1.5,life:24,c:'#777'});
+      } else {
+        // 灰の山
+        ctx.globalAlpha=1-(t-44)/(D-44);
+        ctx.fillStyle='#8f8f8f';
+        ctx.beginPath(); ctx.ellipse(e.x,e.y-8,24*e.scale,12,0,Math.PI,0); ctx.fill();
+      }
+      break;
+    }
+    case 'rocket':{
+      // 打ち上がり→落下して地面へ突き刺さる(逆さ)
+      if(e.y<=GROUND-4 || t<44){
+        ctx.globalAlpha=1;
+        drawEnemyArt(ctx,e.x,e.y,-1,0,cfg,0,e.scale,e.type);
+      } else {
+        ctx.save();
+        ctx.beginPath(); ctx.rect(0,0,W,GROUND+2); ctx.clip();
+        ctx.translate(e.x,e.y-30); ctx.rotate(Math.PI); ctx.translate(-e.x,-(e.y-30));
+        drawEnemyArt(ctx,e.x,e.y-72,-1,0,cfg,0,e.scale,e.type);
+        ctx.restore();
+        ctx.globalAlpha=1-Math.max(0,(t-60))/(D-60);
+      }
+      break;
+    }
+    case 'tornado':{
+      // 回転しながら上空へ
+      ctx.globalAlpha=1-p;
+      ctx.translate(e.x,e.y-40); ctx.rotate(e.rot||0); ctx.translate(-e.x,-(e.y-40));
+      drawEnemyArt(ctx,e.x,e.y,-1,e.walk,cfg,0,e.scale,e.type);
+      break;
+    }
+    case 'gravity':{
+      // 浮かんで急降下、地面へめり込む
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0,0,W,GROUND+2); ctx.clip();
+      const sink=(t>40 && e.y>=GROUND)?26:0;
+      ctx.globalAlpha=t>52?1-(t-52)/(D-52):1;
+      drawEnemyArt(ctx,e.x,e.y+sink,-1,0,cfg,0,e.scale,e.type);
+      ctx.restore();
+      break;
+    }
+    case 'forklift':{
+      // フォークリフトにすくわれて運ばれる
+      ctx.globalAlpha=1-p*0.6;
+      drawEnemyArt(ctx,e.x,e.y-12,-1,0,cfg,0,e.scale,e.type);
+      ctx.fillStyle='#dbe6f5'; ctx.fillRect(e.x-26,e.y-10,52,5);
+      break;
+    }
+    case 'meteor':{
+      // 頭上を見上げた後に隕石が落下、顔だけ残して埋まる
+      if(t<22){
+        drawEnemyArt(ctx,e.x,e.y,-1,0,cfg,0,e.scale,e.type);
+        ctx.font='bold 15px sans-serif'; ctx.fillStyle='#ffd94a'; ctx.textAlign='center';
+        ctx.fillText('!',e.x,e.y-118*e.scale);
+        const my3=e.y-100-(22-t)*16;
+        ctx.fillStyle='#ff8a3a';
+        ctx.beginPath(); ctx.arc(e.x,my3,13,0,Math.PI*2); ctx.fill();
+      } else {
+        // 顔(頭)だけ地面から出ている
+        ctx.globalAlpha=1-Math.max(0,(t-56))/(D-56);
+        ctx.save();
+        ctx.beginPath(); ctx.rect(0,0,W,GROUND+2); ctx.clip();
+        drawEnemyArt(ctx,e.x,e.y+86*e.scale,-1,0,cfg,0,e.scale,e.type);
+        ctx.restore();
+        ctx.fillStyle='#3a2c1c';
+        ctx.beginPath(); ctx.ellipse(e.x,GROUND,26*e.scale,7,0,Math.PI,0,true); ctx.fill();
+      }
+      break;
+    }
     default:{
       ctx.globalAlpha=1-p;
       ctx.translate(e.x,e.y); ctx.rotate(p*1.4); ctx.translate(-e.x,-e.y);
@@ -1387,6 +1909,16 @@ function refreshHud(){
   document.getElementById('hWave').textContent='WAVE '+(waveIdx+1)+'/'+waves.length;
   document.getElementById('hLeft').textContent='残り '+(S.count-killed-leaked);
   document.getElementById('hCombo').textContent = combo>=2 ? combo+' COMBO' : '';
+  // サブ武器の待ち時間
+  const cs=document.getElementById('cdSub');
+  if(subCd>0){ cs.classList.remove('hide'); cs.textContent=Math.ceil(subCd/60); }
+  else cs.classList.add('hide');
+  // 必殺ゲージ
+  const cu=document.getElementById('cdUlt');
+  const need=ultNeed(), pct=Math.min(100,Math.round(ultGauge/need*100));
+  const ub=document.getElementById('btnUlt');
+  if(pct>=100){ cu.classList.add('hide'); ub.classList.add('ready'); }
+  else { cu.classList.remove('hide'); cu.textContent=pct+'%'; ub.classList.remove('ready'); }
 }
 
 /* ================= 評価 ================= */
@@ -1422,8 +1954,8 @@ function endStage(win){
     if(killed>=S.count) add('wipeout','敵全滅');
     if(timeLeft>=10*60) add('timeLeft10','残り時間10秒以上');
     if(maxCombo>=20) add('combo20','コンボ20以上');
-    add('noSub','サブ武器未使用');   // フェーズ2ではサブ未実装のため常に成立
-    add('noUlt','必殺技未使用');
+    if(subUses===0) add('noSub','サブ武器未使用');
+    if(ultUses===0) add('noUlt','必殺技未使用');
     if(first) add('firstClear','初回クリア');
     bonus=Math.min(bonus,BONUS_CAP);
     earned += Math.round(base*(1+bonus));
@@ -1475,8 +2007,16 @@ const press=(el,down,up)=>{
   el.addEventListener('pointerleave',()=>{ up&&up(); });
 };
 press(bm, ()=>{ if(!paused) fireHeld=true; }, ()=>{ fireHeld=false; });
-document.getElementById('btnSub').onclick=()=>{ addFloat(PLAYER_X,GROUND-120,'フェーズ4で実装','#a06bc9'); };
-document.getElementById('btnUlt').onclick=()=>{ addFloat(PLAYER_X,GROUND-140,'フェーズ4で実装','#5be36b'); };
+document.getElementById('btnSub').onclick=()=>{
+  if(!running || paused) return;
+  if(subCd>0) return;
+  fireSub();
+};
+document.getElementById('btnUlt').onclick=()=>{
+  if(!running || paused) return;
+  if(ultGauge<ultNeed()){ addFloat(PLAYER_X,GROUND-140,'ゲージがたまっていない','#8fa5c4'); return; }
+  fireUlt();
+};
 document.getElementById('btnPause').onclick=()=>{
   if(!running) return;
   paused=!paused;
@@ -1527,35 +2067,71 @@ function renderStages(){
     grid.appendChild(d);
   });
 }
-/* ================= ショップ(メイン武器) ================= */
+/* ================= ショップ(3タブ) ================= */
+let shopTab='main';
+const SHOP_CATS={
+  main:{ list:MAINS, store:()=>sv.main, eqGet:()=>sv.eqMain, eqSet:id=>sv.eqMain=id,
+    meta:(w,lv)=>{
+      const d=w.dmg[lv-1], r=w.rate[lv-1];
+      let t='威力 '+d+' / 連射 '+r+'発/秒 ・ 理論火力 '+Math.round(d*r)+'/秒';
+      if(lv<5){
+        const nd=w.dmg[lv], nr=w.rate[lv];
+        t+='<br>強化後: 威力 '+d+'→'+nd+' / 連射 '+r+'→'+nr+' / 理論火力 '+Math.round(d*r)+'→'+Math.round(nd*nr);
+      }
+      return t;
+    },
+    lv1:(w)=>'Lv1: 威力 '+w.dmg[0]+' / 連射 '+w.rate[0]+'発/秒' },
+  sub:{ list:SUBS, store:()=>sv.sub, eqGet:()=>sv.eqSub, eqSet:id=>sv.eqSub=id,
+    meta:(w,lv)=>{
+      let t = w.reflect
+        ? '反射倍率 '+Math.round(w.reflect[lv-1]*100)+'% / 継続 '+w.dur[lv-1]+'秒 / 待ち時間 '+w.cd[lv-1]+'秒'
+        : '威力 '+w.dmg[lv-1]+(w.hits?'×'+w.hits:'')+' / 待ち時間 '+w.cd[lv-1]+'秒'
+          +(w.stun?' / 妨害 '+w.stun[lv-1]+'秒':'')+(w.bind?' / 拘束 '+w.bind[lv-1]+'秒':'');
+      if(lv<5){
+        t += w.reflect
+          ? '<br>強化後: 反射 '+Math.round(w.reflect[lv]*100)+'% / 継続 '+w.dur[lv]+'秒 / 待ち '+w.cd[lv]+'秒'
+          : '<br>強化後: 威力 '+(w.dmg?w.dmg[lv]:'-')+' / 待ち '+w.cd[lv]+'秒';
+      }
+      return t+'<br><span style="color:#a06bc9;">'+w.ability+'</span>';
+    },
+    lv1:(w)=>(w.reflect?'Lv1: 反射 '+Math.round(w.reflect[0]*100)+'% / 待ち '+w.cd[0]+'秒':'Lv1: 威力 '+w.dmg[0]+(w.hits?'×'+w.hits:'')+' / 待ち '+w.cd[0]+'秒')+' ・ '+w.ability },
+  ult:{ list:ULTS, store:()=>sv.ult, eqGet:()=>sv.eqUlt, eqSet:id=>sv.eqUlt=id,
+    meta:(w,lv)=>{
+      let t='威力 '+w.dmg[lv-1]+' / 必要ゲージ '+w.gauge[lv-1];
+      if(lv<5) t+='<br>強化後: 威力 '+w.dmg[lv]+' / 必要ゲージ '+w.gauge[lv];
+      return t+'<br><span style="color:#5be36b;">'+w.ability+'</span>';
+    },
+    lv1:(w)=>'Lv1: 威力 '+w.dmg[0]+' / 必要ゲージ '+w.gauge[0]+' ・ '+w.ability },
+};
 function renderShop(){
   document.getElementById('shopCoins').textContent='$'+sv.coins;
+  document.querySelectorAll('.shop-tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===shopTab));
+  const C=SHOP_CATS[shopTab];
   const list=document.getElementById('shopList');
   list.innerHTML='';
-  MAINS.forEach((w,i)=>{
-    const st=sv.main[w.id];
+  C.list.forEach((w,i)=>{
+    const store=C.store();
+    const st=store[w.id];
     const own=st && st.own;
     const lv=own?st.lv:0;
-    const prev=i===0?null:MAINS[i-1];
-    const prevLv5 = !prev || (sv.main[prev.id] && sv.main[prev.id].lv>=5);
+    const prev=i===0?null:C.list[i-1];
+    const prevLv5 = !prev || (store[prev.id] && store[prev.id].lv>=5);
     const row=document.createElement('div');
-    row.className='shop-row'+(own?'':(prevLv5?'':' locked'))+(sv.eqMain===w.id?' equipped':'');
+    row.className='shop-row'+(own?'':(prevLv5?'':' locked'))+(C.eqGet()===w.id?' equipped':'');
     let metaHtml='', btnsHtml='';
     if(own){
-      const d=w.dmg[lv-1], r=w.rate[lv-1];
-      metaHtml='威力 '+d+' / 連射 '+r+'発/秒 ・ 理論火力 '+Math.round(d*r)+'/秒';
+      metaHtml=C.meta(w,lv);
       if(lv<5){
-        const nd=w.dmg[lv], nr=w.rate[lv], cost=upgradeCost(w.basePrice,lv);
-        metaHtml+='<br>強化後: 威力 '+d+'→'+nd+' / 連射 '+r+'→'+nr+' / 理論火力 '+Math.round(d*r)+'→'+Math.round(nd*nr);
+        const cost=upgradeCost(w.basePrice,lv);
         btnsHtml+='<button class="shop-btn buy" data-up="'+w.id+'" '+(sv.coins<cost?'disabled':'')+'>強化 $'+cost.toLocaleString()+'</button>';
       } else {
-        metaHtml+='<br><span style="color:#ffd94a;">最大レベル。'+(i<MAINS.length-1?'次の武器が購入可能!':'')+'</span>';
+        metaHtml+='<br><span style="color:#ffd94a;">最大レベル。'+(i<C.list.length-1?'次の武器が購入可能!':'')+'</span>';
       }
-      btnsHtml+= sv.eqMain===w.id
+      btnsHtml+= C.eqGet()===w.id
         ? '<button class="shop-btn eq" disabled>装備中</button>'
         : '<button class="shop-btn eq" data-eq="'+w.id+'">装備</button>';
     } else if(prevLv5){
-      metaHtml='Lv1: 威力 '+w.dmg[0]+' / 連射 '+w.rate[0]+'発/秒';
+      metaHtml=C.lv1(w);
       btnsHtml='<button class="shop-btn buy" data-buy="'+w.id+'" '+(sv.coins<w.unlockPrice?'disabled':'')+'>購入 $'+w.unlockPrice.toLocaleString()+'</button>';
     } else {
       metaHtml='🔒 '+prev.name+'をLv5にすると購入できます';
@@ -1567,19 +2143,21 @@ function renderShop(){
   });
   list.querySelectorAll('[data-buy]').forEach(b=>{
     b.onclick=()=>{
-      const w=mainOf(b.dataset.buy);
-      const st=sv.main[w.id];
-      if(st && st.own) return;                       // 二重購入防止
-      if(sv.coins<w.unlockPrice) return;             // コイン不足
+      const store=C.store();
+      const w=C.list.find(x=>x.id===b.dataset.buy);
+      const st=store[w.id];
+      if(st && st.own) return;
+      if(sv.coins<w.unlockPrice) return;
       sv.coins-=w.unlockPrice;
-      sv.main[w.id]={own:true,lv:1};
+      store[w.id]={own:true,lv:1};
       save(); SFX.clear(); renderShop();
     };
   });
   list.querySelectorAll('[data-up]').forEach(b=>{
     b.onclick=()=>{
-      const w=mainOf(b.dataset.up);
-      const st=sv.main[w.id];
+      const store=C.store();
+      const w=C.list.find(x=>x.id===b.dataset.up);
+      const st=store[w.id];
       if(!st || !st.own || st.lv>=5) return;
       const cost=upgradeCost(w.basePrice,st.lv);
       if(sv.coins<cost) return;
@@ -1591,9 +2169,12 @@ function renderShop(){
     };
   });
   list.querySelectorAll('[data-eq]').forEach(b=>{
-    b.onclick=()=>{ sv.eqMain=b.dataset.eq; save(); SFX.tap(); renderShop(); };
+    b.onclick=()=>{ C.eqSet(b.dataset.eq); save(); SFX.tap(); renderShop(); };
   });
 }
+document.querySelectorAll('.shop-tab').forEach(b=>{
+  b.onclick=()=>{ shopTab=b.dataset.tab; SFX.tap(); renderShop(); };
+});
 document.getElementById('goShop').onclick=()=>{ SFX.tap(); showScreen('scrShop'); renderShop(); };
 document.getElementById('shopBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
 
