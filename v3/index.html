@@ -66,7 +66,7 @@
   #bossName{font-size:11px;color:#ff8a3a;font-weight:bold;text-align:center;
     text-shadow:0 2px 4px #000;margin-bottom:2px;}
 
-  .pad{position:fixed;pointer-events:auto;border-radius:50%;
+  .pad{position:fixed;pointer-events:auto;border-radius:50%;touch-action:none;
     background:rgba(255,255,255,.13);border:2px solid rgba(255,255,255,.3);
     display:flex;align-items:center;justify-content:center;color:#fff;
     font-weight:bold;user-select:none;z-index:11;}
@@ -360,6 +360,15 @@
     <p class="hint">コイン・武器・レベル・ステージ進行が<br><b style="color:#ff8a3a;">すべて消えます。</b>元に戻せません。</p>
     <button class="btn" id="resetYes" style="background:#ff5a4a;color:#fff;box-shadow:0 4px 0 #a32a20;">初期化する</button>
     <button class="btn sub" id="resetNo">やめる</button>
+  </div>
+</div>
+
+<!-- 武器選択(武器切替ボタンで一時停止して表示) -->
+<div class="overlay" id="ovWeaponSelect">
+  <div class="card" style="max-width:min(440px,92vw);">
+    <h2>メイン武器を選択</h2>
+    <div id="weaponSelectList" style="display:flex;flex-direction:column;gap:8px;width:100%;max-height:55vh;overflow-y:auto;"></div>
+    <button class="btn sub" id="weaponSelectCancel">閉じる(選ばない)</button>
   </div>
 </div>
 
@@ -948,8 +957,10 @@ function drawEnemyArt(g,footX,footY,dir,walk,cfg,flash,scale,type){
   }
   g.restore();
 }
-function drawPlayerArt(g,x,y,cfg){
-  g.save(); g.translate(x,y);
+const HERO_SCALE = 1.7 * ENEMY_TYPES.heavy.size;   // 主人公は重装敵と同じ大きさにする
+function drawPlayerArt(g,x,y,cfg,scale){
+  scale = scale===undefined ? 1 : scale;
+  g.save(); g.translate(x,y); g.scale(scale,scale);
   if(cfg && cfg.mode==='body' && cfg.bodyImg){
     const b=cfg.bodyImg, h=150, w=h*b.width/b.height;
     g.drawImage(b,-w/2,-h,w,h); g.restore(); return;
@@ -1724,7 +1735,7 @@ function draw(){
   ctx.save(); ctx.translate(DEF_X-13,GROUND/2); ctx.rotate(-Math.PI/2);
   ctx.fillText('防衛ライン',0,0); ctx.restore();
 
-  drawPlayerArt(ctx,PLAYER_X,GROUND,charCfg.hero);
+  drawPlayerArt(ctx,PLAYER_X,GROUND,charCfg.hero,HERO_SCALE);
 
   // 敵
   for(const e of enemies){
@@ -2354,16 +2365,18 @@ const press=(el,down,up)=>{
   el.addEventListener('pointerleave',()=>{ up&&up(); });
 };
 press(bm, ()=>{ if(!paused) fireHeld=true; }, ()=>{ fireHeld=false; });
-document.getElementById('btnSub').onclick=()=>{
+// サブ・必殺技はpointerdownで即時発動(pointerup待ちのclickにしない)。
+// これによりメイン武器を長押し連射しながら、指を増やしてサブ・必殺技を同時に押せる。
+press(document.getElementById('btnSub'), ()=>{
   if(!running || paused) return;
   if(subCd>0) return;
   fireSub();
-};
-document.getElementById('btnUlt').onclick=()=>{
+});
+press(document.getElementById('btnUlt'), ()=>{
   if(!running || paused) return;
   if(ultGauge<ultNeed()){ addFloat(PLAYER_X,GROUND-140,'ゲージがたまっていない','#8fa5c4'); return; }
   fireUlt();
-};
+});
 document.getElementById('btnPause').onclick=()=>{
   if(!running) return;
   paused=!paused;
@@ -2563,17 +2576,41 @@ document.addEventListener('webkitfullscreenchange', ()=>{ fitCanvas(); setTimeou
 function refreshMute(){ document.getElementById('btnMute').textContent = sv.muted?'🔇':'🔊'; }
 document.getElementById('btnMute').onclick=()=>{ sv.muted=!sv.muted; save(); refreshMute(); if(!sv.muted) SFX.tap(); };
 
-/* ⑦ 武器切替(持っているメイン武器を順番に持ちかえる) */
+/* ① 武器切替: 一時停止して所持武器の一覧から選ぶ */
 function ownedMains(){ return MAINS.filter(w=>sv.main[w.id] && sv.main[w.id].own); }
 document.getElementById('btnSwap').onclick=()=>{
+  if(!running) return;
   const list=ownedMains();
   if(list.length<=1){ addFloat(PLAYER_X,GROUND-120,'他の武器がありません','#8fa5c4'); return; }
-  const i=list.findIndex(w=>w.id===sv.eqMain);
-  sv.eqMain=list[(i+1)%list.length].id;
-  save(); gatlingRamp=0; fireCd=0;
-  SFX.weaponSwitch();
-  addFloat(PLAYER_X,GROUND-120,curMain().name+' Lv'+curLv(),'#ffd94a');
-  refreshHud();
+  paused=true; fireHeld=false;
+  renderWeaponSelect(list);
+  document.getElementById('ovWeaponSelect').classList.add('show');
+  SFX.tap();
+};
+function renderWeaponSelect(list){
+  const box=document.getElementById('weaponSelectList');
+  box.innerHTML='';
+  list.forEach(w=>{
+    const lv=sv.main[w.id].lv;
+    const row=document.createElement('div');
+    row.className='shop-row'+(sv.eqMain===w.id?' equipped':'');
+    row.style.cursor='pointer';
+    row.innerHTML='<div class="shop-name"><span>'+w.name+'</span><span class="lv">Lv'+lv
+      +(sv.eqMain===w.id?' ・装備中':'')+'</span></div>'
+      +'<div class="shop-meta">威力 '+w.dmg[lv-1]+' / 連射 '+w.rate[lv-1]+'発/秒</div>';
+    row.onclick=()=>{
+      sv.eqMain=w.id; save(); gatlingRamp=0; fireCd=0;
+      SFX.weaponSwitch();
+      document.getElementById('ovWeaponSelect').classList.remove('show');
+      paused=false;
+      refreshHud();
+    };
+    box.appendChild(row);
+  });
+}
+document.getElementById('weaponSelectCancel').onclick=()=>{
+  document.getElementById('ovWeaponSelect').classList.remove('show');
+  paused=false; SFX.tap();
 };
 
 /* ================= データのバックアップ =================
