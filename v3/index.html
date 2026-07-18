@@ -134,6 +134,16 @@
   .set-btn{flex:1;background:#233650;color:#8fa5c4;border:2px solid #3d5270;border-radius:10px;
     padding:10px 4px;font-size:12px;font-weight:bold;cursor:pointer;}
   .set-btn.on{background:var(--green);color:#08240f;border-color:var(--green);}
+  .bird-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;
+    width:min(640px,94vw);flex:1;overflow-y:auto;padding:4px;align-content:start;}
+  .bird-card{background:#1b2b44;border:2px solid #34496b;border-radius:12px;padding:8px 4px;
+    display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;}
+  .bird-card.sel{border-color:var(--green);background:#1c3a28;}
+  .bird-card.locked{opacity:.5;border-style:dashed;cursor:default;}
+  .bird-card canvas{background:#233650;border-radius:8px;}
+  .bird-card .bname{font-size:11px;font-weight:bold;color:#fff;text-align:center;}
+  .bird-card .bcls{font-size:9px;color:#8fa5c4;}
+  .bird-card .bdesc{font-size:9px;color:#8fa5c4;line-height:1.4;text-align:center;}
   #codeOut,#codeIn{width:100%;height:74px;background:#0e1726;border:2px solid #3d5270;
     border-radius:10px;color:#dbe6f5;font-size:11px;padding:8px;font-family:monospace;
     resize:none;word-break:break-all;}
@@ -215,6 +225,8 @@
   <div class="coin-badge" id="titleCoins">$0</div>
   <button class="btn" id="goStages">ステージ選択</button>
   <button class="btn sub" id="goShop">ショップ</button>
+  <button class="btn sub" id="goBirds">仲間を選ぶ</button>
+  <button class="btn sub" id="goBirdDex">鳥図鑑</button>
   <button class="btn sub" id="goPhoto">写真設定</button>
   <button class="btn sub" id="goBackup">データのバックアップ</button>
   <button class="btn sub" id="goSettings">設定</button>
@@ -287,6 +299,31 @@
   </div>
 </div>
 
+
+<!-- 仲間を選ぶ(BirdSelectionUI) -->
+<div class="screen" id="scrBirds" style="justify-content:flex-start;padding-top:2vh;">
+  <h1 style="font-size:clamp(17px,4.5vw,24px);">仲間を選ぶ</h1>
+  <p class="hint" style="margin:0;">同行する鳥を最大5羽まで選べます(タップで選択/解除)。</p>
+  <button class="btn sub" id="birdRandomBtn">おまかせ(毎回ランダム編成)</button>
+  <div id="birdSelGrid" class="bird-grid"></div>
+  <button class="btn" id="birdsBack">タイトルへ</button>
+</div>
+
+<!-- 鳥図鑑(BirdDex) -->
+<div class="screen" id="scrBirdDex" style="justify-content:flex-start;padding-top:2vh;">
+  <h1 style="font-size:clamp(17px,4.5vw,24px);">鳥図鑑</h1>
+  <p class="hint" id="dexCount" style="margin:0;"></p>
+  <div id="birdDexGrid" class="bird-grid"></div>
+  <button class="btn" id="birdDexBack">タイトルへ</button>
+</div>
+
+<!-- 鳥の解放(ステージ6/12/18/24初回クリア時) -->
+<div class="overlay" id="ovBirdPick" style="z-index:65;">
+  <div class="card" style="max-width:min(520px,94vw);">
+    <h2 style="color:#5be36b;">新しい仲間を1羽えらぼう!</h2>
+    <div id="birdPickGrid" class="bird-grid" style="max-height:52vh;"></div>
+  </div>
+</div>
 
 <!-- データのバックアップ -->
 <div class="screen" id="scrBackup" style="justify-content:flex-start;padding-top:2vh;">
@@ -534,6 +571,90 @@ const ULTS = [
     dmg:[350,403,473,560,665], gauge:[150,140,132,122,113], area:[0.70,0.75,0.80,0.90,1.00],
     death:'meteor', ability:'広範囲に隕石を落とす' },
 ];
+/* ================= 仲間の鳥(BirdData) =================
+   実在の鳥の特徴(体色・冠羽・頬・嘴・尾・模様)をパラメータで再現する。
+   sizeは羽を広げた時のおおよその横幅px。flapSpdは羽ばたきの速さ。 */
+const BIRDS = [
+  // 小型
+  { id:'kinka', name:'キンカチョウ', cls:'小型', size:21, flapSpd:0.55,
+    desc:'オレンジの頬と赤い嘴、胸のしま模様がトレードマーク。',
+    sp:{ bodyC:'#b8b2a8', bellyC:'#f2ece0', headC:'#b8b2a8', beakC:'#e8542f', beakType:'cone',
+         cheekC:'#e8862f', tailC:'#3a3a3a', tailLen:8, wingC:'#a89f92',
+         chestStripes:true, flankDots:true, eyeC:'#5a2a1a' } },
+  { id:'canaria', name:'カナリア', cls:'小型', size:22, flapSpd:0.52,
+    desc:'全身あざやかな黄色。歌声の美しさで知られる。',
+    sp:{ bodyC:'#ffd94a', bellyC:'#ffe98a', headC:'#ffd94a', beakC:'#e8c9a0', beakType:'cone',
+         tailC:'#e0b830', tailLen:9, wingC:'#e8c53a', eyeC:'#3a2a1a' } },
+  { id:'bunchou', name:'文鳥', cls:'小型', size:23, flapSpd:0.52,
+    desc:'黒い頭に白い頬、太くて赤い嘴。目のまわりの赤いリングも特徴。',
+    sp:{ bodyC:'#9aa0a8', bellyC:'#d8cfc4', headC:'#1c1c22', beakC:'#e84a5a', beakType:'thickcone',
+         cheekC:'#ffffff', tailC:'#1c1c22', tailLen:9, wingC:'#8a909a',
+         eyeRingC:'#e84a5a', eyeC:'#2a1a1a' } },
+  { id:'mameruriha', name:'マメルリハ', cls:'小型', size:20, flapSpd:0.58,
+    desc:'世界最小クラスのインコ。青みがかった緑がきれい。',
+    sp:{ bodyC:'#5fbf6a', bellyC:'#8fd98a', headC:'#5fbf6a', beakC:'#e8c9a0', beakType:'hook',
+         tailC:'#3a8fbf', tailLen:6, wingC:'#3a9fd0', eyeC:'#2a1a1a' } },
+  { id:'botan', name:'ボタンインコ', cls:'小型', size:22, flapSpd:0.55,
+    desc:'オレンジの顔と白いメガネ(アイリング)がチャームポイント。',
+    sp:{ bodyC:'#5fbf5a', bellyC:'#8fd97a', headC:'#e8862f', beakC:'#e8542f', beakType:'hook',
+         tailC:'#3a9f4a', tailLen:7, wingC:'#4aa64a', eyeRingC:'#ffffff', eyeC:'#2a1a1a' } },
+  { id:'kozakura', name:'コザクラインコ', cls:'小型', size:23, flapSpd:0.55,
+    desc:'桃色の顔をした「ラブバード」。緑の体との対比が可愛い。',
+    sp:{ bodyC:'#6fc95a', bellyC:'#9fdf7a', headC:'#f08a8a', beakC:'#e8c9a0', beakType:'hook',
+         tailC:'#4aa64a', tailLen:7, wingC:'#5ab54a', eyeC:'#2a1a1a' } },
+  { id:'sekisei', name:'セキセイインコ', cls:'小型', size:23, flapSpd:0.55,
+    desc:'黄色い顔と、背中から翼にかけての黒いしま模様が特徴。',
+    sp:{ bodyC:'#6fd95a', bellyC:'#8fe97a', headC:'#f2e94a', beakC:'#c9a878', beakType:'hook',
+         tailC:'#3a6fbf', tailLen:11, wingC:'#d8d24a', wingStripes:true, eyeC:'#2a1a1a' } },
+  { id:'sazanami', name:'サザナミインコ', cls:'小型', size:22, flapSpd:0.5,
+    desc:'さざ波のような細かい模様が全身に入る、おっとりした性格のインコ。',
+    sp:{ bodyC:'#7fbf5a', bellyC:'#9fcf7a', headC:'#7fbf5a', beakC:'#e8c9a0', beakType:'hook',
+         tailC:'#4a8f3a', tailLen:8, wingC:'#6fae4a', barring:true, eyeC:'#2a1a1a' } },
+  // 中型
+  { id:'uroko', name:'ウロコインコ', cls:'中型', size:30, flapSpd:0.42,
+    desc:'胸のウロコ模様と、えんじ色の尾。よく寝転がる陽気なインコ。',
+    sp:{ bodyC:'#4aa64a', bellyC:'#6fc95a', headC:'#4a4a52', beakC:'#3a3a3a', beakType:'hook',
+         cheekC:'#7a9a6a', tailC:'#8a2a3a', tailLen:12, wingC:'#3a8f8f',
+         scallop:true, eyeRingC:'#e8e8e8', eyeC:'#2a1a1a' } },
+  { id:'okame', name:'オカメインコ', cls:'中型', size:32, flapSpd:0.4,
+    desc:'ピンと立った冠羽とオレンジのほっぺ。人気ナンバーワン級。',
+    sp:{ bodyC:'#b8b2a8', bellyC:'#d8d2c8', headC:'#f2e94a', beakC:'#c9a878', beakType:'hook',
+         cheekC:'#f0862f', tailC:'#8a857a', tailLen:15, wingC:'#a09a8f',
+         crestC:'#f2e94a', crestType:'spike', eyeC:'#2a1a1a' } },
+  { id:'shirohara', name:'シロハラインコ', cls:'中型', size:31, flapSpd:0.42,
+    desc:'オレンジの頭に真っ白なお腹。ピョンピョン跳ねるコミカルな鳥。',
+    sp:{ bodyC:'#4aa64a', bellyC:'#ffffff', headC:'#f0a02f', beakC:'#3a3a3a', beakType:'hook',
+         cheekC:'#f2e94a', tailC:'#3a8f3a', tailLen:9, wingC:'#3a8f3a', eyeC:'#5a2a1a' } },
+  // 大型
+  { id:'youmu', name:'ヨウム', cls:'大型', size:40, flapSpd:0.32,
+    desc:'グレーの体に真っ赤な尾。とても賢く、人の言葉を覚える。',
+    sp:{ bodyC:'#8f8f96', bellyC:'#b0b0b6', headC:'#a8a8ae', beakC:'#2a2a2a', beakType:'bighook',
+         cheekC:'#e8e8ec', tailC:'#e83a3a', tailLen:12, wingC:'#7a7a82', eyeC:'#e8d94a' } },
+  { id:'momoiro', name:'モモイロインコ', cls:'大型', size:38, flapSpd:0.32,
+    desc:'ピンクの体に淡い冠羽、翼はグレー。甘えん坊なオウム。',
+    sp:{ bodyC:'#f08a9a', bellyC:'#f0a8b4', headC:'#f8c9d4', beakC:'#e8e0d0', beakType:'bighook',
+         tailC:'#a8a8ae', tailLen:11, wingC:'#9a9aa2',
+         crestC:'#f8d9e0', crestType:'round', eyeC:'#3a1a1a' } },
+  { id:'kibatan', name:'キバタン', cls:'大型', size:42, flapSpd:0.3,
+    desc:'真っ白な体に黄色い冠羽。冠羽を大きく広げてアピールする。',
+    sp:{ bodyC:'#f5f5f0', bellyC:'#ffffff', headC:'#f5f5f0', beakC:'#3a3a3a', beakType:'bighook',
+         tailC:'#e8e8dc', tailLen:12, wingC:'#e8e8e0',
+         crestC:'#f2e04a', crestType:'bigspike', eyeC:'#2a1a1a' } },
+  { id:'taihaku', name:'タイハクオウム', cls:'大型', size:43, flapSpd:0.3,
+    desc:'全身純白の大きなオウム。傘のように広がる白い冠羽を持つ。',
+    sp:{ bodyC:'#ffffff', bellyC:'#ffffff', headC:'#ffffff', beakC:'#3a3a3a', beakType:'bighook',
+         tailC:'#f0f0ea', tailLen:12, wingC:'#f0f0ea',
+         crestC:'#ffffff', crestType:'round', eyeC:'#2a1a1a' } },
+  // 超大型
+  { id:'kongou', name:'コンゴウインコ', cls:'超大型', size:55, flapSpd:0.2,
+    desc:'真っ赤な体に黄色と青の大きな翼、長い尾。白い顔も特徴の最大級インコ。',
+    sp:{ bodyC:'#e83a3a', bellyC:'#e85a4a', headC:'#e83a3a', beakC:'#e8e0d0', beakType:'bighook',
+         cheekC:'#f5f0ea', tailC:'#e83a3a', tailLen:22, wingC:'#f2c94a', wing2C:'#3a6fd0', eyeC:'#e8e8e8' } },
+];
+const birdOf = id => BIRDS.find(b=>b.id===id);
+/* 鳥の解放ステージ: 6/12/18/24の初回クリアで1羽選択、30初回クリアで全解放 */
+const BIRD_UNLOCK_STAGES=[6,12,18,24];
+
 const subOf = id => SUBS.find(w=>w.id===id);
 const ultOf = id => ULTS.find(w=>w.id===id);
 
@@ -552,6 +673,7 @@ const DEFAULT_SAVE={
   sub:{punch:{own:true,lv:1}},
   ult:{flame:{own:true,lv:1}},
   eqMain:'handgun', eqSub:'punch', eqUlt:'flame',
+  birdUnlocked:['bunchou'], birdParty:'random',
   cleared:{},           // {stageId: {rank, score, count, day, dayCount}}
   unlocked:1,           // 解放済み最大ステージ
   fx:'normal', muted:false,
@@ -587,6 +709,17 @@ function load(){
     }
     if(!s.ult.flame) s.ult.flame={own:true,lv:1};
     if(!ultOf(s.eqUlt) || !s.ult[s.eqUlt] || !s.ult[s.eqUlt].own) s.eqUlt='flame';
+    // 鳥データの検証
+    if(!Array.isArray(s.birdUnlocked)) s.birdUnlocked=['bunchou'];
+    s.birdUnlocked=s.birdUnlocked.filter(id=>birdOf(id));
+    if(!s.birdUnlocked.length) s.birdUnlocked=['bunchou'];
+    if(s.birdParty!=='random'){
+      if(!Array.isArray(s.birdParty)) s.birdParty='random';
+      else{
+        s.birdParty=s.birdParty.filter(id=>birdOf(id)&&s.birdUnlocked.includes(id)).slice(0,5);
+        if(!s.birdParty.length) s.birdParty='random';
+      }
+    }
     if(typeof s.unlocked!=='number' || s.unlocked<1 || s.unlocked>30) s.unlocked=1;
     if(!s.cleared || typeof s.cleared!=='object') s.cleared={};
     return s;
@@ -1059,6 +1192,8 @@ const SFX={
   u_forklift:()=>{sweep(120,150,0.5,'square',0.07); noise(0.3,0.05,400);},
   u_meteor:()=>{sweep(1200,60,0.5,'sawtooth',0.1); setTimeout(()=>{noise(0.5,0.14,400);},420);},
   explode:()=>{noise(0.28,0.12,600); beep(80,0.16,'sawtooth',0.07);},
+  poop:()=>{noise(0.08,0.05,500); beep(300,0.05,'sine',0.04);},
+  birdGet:()=>{[784,988,1175,1568].forEach((f,i)=>setTimeout(()=>beep(f,0.12,'triangle',0.07),i*80));},
   bossAppear:()=>{[110,98,87,110].forEach((f,i)=>setTimeout(()=>beep(f,0.22,'sawtooth',0.1),i*180));},
   bossKill:()=>{[523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>beep(f,0.14,'triangle',0.09),i*90));},
 };
@@ -1070,6 +1205,7 @@ let enemies=[], bullets=[], parts=[], floats=[], fx=[];
 let gatlingRamp=0, pendingRail=0, pendingRailDmg=0;
 let subCd=0, ultGauge=0, subUses=0, ultUses=0, dots=[], sweeps=[], barrierT=0, barrierMul=1;
 let bossSpawned=false, bossDone=false, bossRef=null, bossDmgAcc=0;
+let activeBirds=[];
 let defHp=10, defMax=10, timeLeft=60*60, waves=[], waveIdx=0, waveTimer=0;
 let spawnQueue=[], spawned=0, killed=0, leaked=0, earned=0;
 let combo=0, maxCombo=0, comboTimer=0, shots=0, hits=0, damageTaken=0;
@@ -1105,6 +1241,7 @@ function startStage(id){
   subCd=0; ultGauge=0; subUses=0; ultUses=0; dots=[]; sweeps=[]; barrierT=0;
   bossSpawned=false; bossDone=false; bossRef=null; bossDmgAcc=0;
   document.getElementById('bossBarWrap').classList.remove('show');
+  initBirds();
   defMax=defenseHp(id); defHp=defMax;
   timeLeft=60*60; waves=buildWaves(S); waveIdx=0; waveTimer=0;
   spawnQueue=waves[0].slice(); spawned=0; killed=0; leaked=0; earned=0;
@@ -1139,6 +1276,77 @@ function spawnEnemy(type){
     shield:!!T.shield, shieldUsed:false, dying:0 });
   spawned++;
 }
+/* ================= 仲間の鳥(BirdManager / BirdAI) ================= */
+const BIRD_SLOTS=[            // プレイヤー上空の護衛位置(5枠)
+  {dx:-12, dy:-205}, {dx:34, dy:-186}, {dx:-52, dy:-182},
+  {dx:66, dy:-214}, {dx:-84, dy:-216},
+];
+function partyBirds(){
+  // 編成が「おまかせ」なら解放済みからランダムに最大5羽
+  if(sv.birdParty==='random'){
+    const pool=sv.birdUnlocked.slice();
+    for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+    return pool.slice(0,5).map(birdOf).filter(Boolean);
+  }
+  return sv.birdParty.map(birdOf).filter(Boolean);
+}
+function initBirds(){
+  activeBirds = partyBirds().map((b,i)=>({
+    def:b, slot:i,
+    x:PLAYER_X+BIRD_SLOTS[i].dx-40, y:GROUND+BIRD_SLOTS[i].dy,
+    phase:Math.random()*6.28,
+    bobSpd:0.05+Math.random()*0.03,       // ふわふわ上下の速さ(個体差)
+    swayAmp:6+Math.random()*8,            // 左右の揺れ幅(個体差)
+    flapT:Math.random()*6.28,
+    visitT:300+Math.floor(Math.random()*400),  // ときどきプレイヤーの近くへ寄る
+    visiting:0,
+  }));
+}
+function updateBirds(){
+  for(let i=0;i<activeBirds.length;i++){
+    const b=activeBirds[i], slot=BIRD_SLOTS[b.slot];
+    b.phase+=b.bobSpd;
+    b.flapT+=b.def.flapSpd;               // 大型ほどゆっくり羽ばたく
+    // ときどきプレイヤーの近くへ降りてくる
+    if(b.visiting>0){ b.visiting--; }
+    else if(--b.visitT<=0){ b.visitT=380+Math.floor(Math.random()*420); b.visiting=90; }
+    const ty = GROUND + slot.dy + Math.sin(b.phase)*7 + (b.visiting>0? 90:0);
+    const tx = PLAYER_X + slot.dx + Math.sin(b.phase*0.6)*b.swayAmp;
+    b.x += (tx-b.x)*0.06;
+    b.y += (ty-b.y)*0.06;
+    // 鳥同士が重ならないよう軽く反発する
+    for(let j=0;j<activeBirds.length;j++){
+      if(i===j) continue;
+      const o=activeBirds[j];
+      const dx=b.x-o.x, dy=b.y-o.y, d=Math.hypot(dx,dy);
+      const minD=(b.def.size+o.def.size)*0.42;
+      if(d>0 && d<minD){ b.x+=dx/d*0.8; b.y+=dy/d*0.8; }
+    }
+  }
+}
+/* 鳥の攻撃: メイン武器と完全同期(fireMainから呼ばれる)。威力は現在威力の25% */
+function birdsFire(){
+  const dmg=Math.max(1, Math.round(mainDmg()*0.25));
+  for(const b of activeBirds){
+    const t=aliveNearest(1)[0];
+    if(!t) return;
+    const ty=t.y-70*t.scale;
+    const dx=t.x-b.x, dy=ty-b.y, d=Math.hypot(dx,dy)||1;
+    bullets.push({kind:'birdshot',x:b.x+8,y:b.y,vx:dx/d*10,vy:dy/d*10,dmg,life:70});
+    // 特殊能力: 約4%の確率で糞を落とす(ダメージなし・移動20%低下2秒)
+    if(Math.random()<0.04){
+      bullets.push({kind:'poop',x:b.x,y:b.y+6,vx:0.3,vy:1.2,life:180});
+    }
+  }
+}
+function drawBirds(){
+  for(const b of activeBirds){
+    // 羽ばたき: sinを0..1に正規化
+    const flap=(Math.sin(b.flapT)+1)/2;
+    drawBird(ctx,b.def,b.x,b.y,flap,1);
+  }
+}
+
 /* ================= ボス ================= */
 function spawnBoss(){
   const B=BOSSES[S.boss-1];
@@ -1241,7 +1449,9 @@ function updateBoss(e){
       break;
   }
   if(move){
-    e.x-=Math.max(e.baseSpd*0.2, sp);
+    let sp2=Math.max(e.baseSpd*0.2, sp);
+    if(e.poopT>0){ e.poopT--; sp2*=0.8; }      // 糞はボスにも有効(20%減速)
+    e.x-=sp2;
     e.walk+=0.1;
   }
   // 防衛ラインに到達: 大ダメージ+ノックバック(倒すまで繰り返し攻めてくる)
@@ -1313,6 +1523,7 @@ function fireMain(){
   fireCd=Math.round(60/rate);
   const bx=PLAYER_X+30, by=GROUND-38;
   shots++;
+  birdsFire();   // 仲間の鳥もメイン武器と同じタイミングで攻撃
   switch(w.id){
     case 'handgun':
       bullets.push({kind:'bullet',x:bx,y:by,vx:11,dmg,death:'handgun'}); SFX.w_handgun(); break;
@@ -1547,6 +1758,17 @@ function onProjectileHit(b,e){
     case 'sub_pallet':
       hitEnemy(e,b.dmg,'pallet');
       break;
+    case 'birdshot':
+      hitEnemy(e,b.dmg,curMain().death);
+      break;
+    case 'poop':
+      // 糞: ダメージなし。移動速度20%低下を2秒(重ね掛けなし)。ボスにも有効
+      if(!(e.poopT>0)){
+        e.poopT=120;
+        addFloat(e.x,e.y-120*e.scale,'ポフッ 💩','#f0f0e0');
+        SFX.poop();
+      }
+      break;
   }
 }
 function leak(e){
@@ -1582,6 +1804,7 @@ function update(){
     spawnBoss();
   }
 
+  updateBirds();
   // サブ武器の待ち時間
   if(subCd>0) subCd--;
   // チェーンソーの連続ヒット
@@ -1621,7 +1844,7 @@ function update(){
 
   // 弾
   bullets=bullets.filter(b=>{
-    if(b.kind==='grenade'){ b.x+=b.vx; b.y+=b.vy; b.vy+=0.32; }
+    if(b.kind==='grenade' || b.kind==='poop'){ b.x+=b.vx; b.y+=b.vy; b.vy+=(b.kind==='poop'?0.12:0.32); }
     else { b.x+=b.vx; if(b.vy) b.y+=b.vy; }
     if(b.life!==undefined && --b.life<=0) return false;
     for(const e of enemies){
@@ -1636,6 +1859,10 @@ function update(){
         }
         onProjectileHit(b,e); return false;
       }
+    }
+    if(b.kind==='poop' && b.y>=GROUND-2){
+      for(let i=0;i<3;i++) parts.push({x:b.x,y:GROUND-2,vx:(Math.random()-0.5)*2,vy:-Math.random()*1.5,life:14,c:'#f0f0e0'});
+      return false;
     }
     // グレネードは地面に落ちても爆発する
     if(b.kind==='grenade' && b.y>=GROUND-4){
@@ -1694,8 +1921,9 @@ function update(){
     if(e.frozen>0){ e.frozen--; continue; }   // 凍結中は動かない
     if(e.stunT>0){ e.stunT--; continue; }     // 段ボール・フィルムで停止中
     if(e.boss){ updateBoss(e); if(!running) return; continue; }
-    const sp = e.stagger>0 ? e.spd*0.4 : e.spd;  // ふらつき中は減速
+    let sp = e.stagger>0 ? e.spd*0.4 : e.spd;  // ふらつき中は減速
     if(e.stagger>0) e.stagger--;
+    if(e.poopT>0){ e.poopT--; sp*=0.8; }       // 糞: 20%減速
     e.x-=sp; e.walk+=0.12;
     if(e.x<=DEF_X) leak(e);
   }
@@ -1736,6 +1964,7 @@ function draw(){
   ctx.fillText('防衛ライン',0,0); ctx.restore();
 
   drawPlayerArt(ctx,PLAYER_X,GROUND,charCfg.hero,HERO_SCALE);
+  drawBirds();
 
   // 敵
   for(const e of enemies){
@@ -1786,6 +2015,14 @@ function draw(){
         ctx.lineTo(e.x+20*e.scale,e.y-(30+i*22)*e.scale); ctx.stroke();
       }
     }
+    // 糞デバフ表示(💩と目眩)
+    if(e.poopT>0){
+      ctx.font='11px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('💩', e.x-9, ey-116*e.scale);
+      const a2=performance.now()/130;
+      ctx.strokeStyle='rgba(240,240,224,.85)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(e.x+8,ey-118*e.scale,4,a2,a2+4.4); ctx.stroke();
+    }
     // ふらつき表示(頭上のうずまき)
     if(e.stagger>0){
       ctx.strokeStyle='rgba(255,217,74,.9)'; ctx.lineWidth=2;
@@ -1827,6 +2064,13 @@ function draw(){
       ctx.beginPath(); ctx.arc(b.x,b.y,b.mini?5:8,0,Math.PI*2); ctx.fill();
     } else if(b.kind==='pellet'){
       ctx.fillStyle='#ffb43a'; ctx.fillRect(b.x-3,b.y-1.5,6,3);
+    } else if(b.kind==='birdshot'){
+      ctx.fillStyle='#ffd94a';
+      ctx.beginPath(); ctx.ellipse(b.x,b.y,4,2,Math.atan2(b.vy,b.vx),0,Math.PI*2); ctx.fill();
+    } else if(b.kind==='poop'){
+      ctx.fillStyle='#f5f2e8';
+      ctx.beginPath(); ctx.arc(b.x,b.y,3,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x-1,b.y-2.5,2,0,Math.PI*2); ctx.fill();
     } else if(b.kind==='sub_box'){
       ctx.fillStyle='#c9a06a'; ctx.fillRect(b.x-9,b.y-9,18,18);
       ctx.strokeStyle='#8a6a3a'; ctx.lineWidth=2; ctx.strokeRect(b.x-9,b.y-9,18,18);
@@ -1940,6 +2184,133 @@ function draw(){
   for(const f of floats){ ctx.globalAlpha=Math.min(1,f.life/22); ctx.fillStyle=f.c; ctx.fillText(f.t,f.x,f.y); }
   ctx.globalAlpha=1;
   ctx.restore();
+}
+
+/* ================= 鳥の描画 =================
+   横向き(右向き)の飛行姿。flap: 0(閉)〜1(全開)の羽ばたき位相。
+   種ごとのspパラメータで体色・冠羽・頬・嘴・尾・模様を描き分ける。 */
+function drawBird(g, bird, x, y, flap, dir){
+  const sp=bird.sp, S=bird.size/30;   // 30pxを基準に拡縮
+  g.save(); g.translate(x,y); g.scale((dir||1)*S, S);
+  const bw=13, bh=9;                   // 体の基本サイズ(拡縮前)
+
+  // 尾羽(後方へ)
+  g.fillStyle=sp.tailC;
+  g.beginPath();
+  g.moveTo(-bw*0.55,-1);
+  g.lineTo(-bw*0.55-sp.tailLen, -3.4);
+  g.lineTo(-bw*0.55-sp.tailLen,  2.6);
+  g.lineTo(-bw*0.55, 3);
+  g.closePath(); g.fill();
+  // コンゴウインコの尾は先端を青に
+  if(sp.wing2C){
+    g.fillStyle=sp.wing2C;
+    g.fillRect(-bw*0.55-sp.tailLen, -3.4, sp.tailLen*0.35, 6);
+  }
+
+  // 体
+  g.fillStyle=sp.bodyC;
+  g.beginPath(); g.ellipse(0,0,bw*0.62,bh*0.62,0,0,Math.PI*2); g.fill();
+  // 腹
+  g.fillStyle=sp.bellyC;
+  g.beginPath(); g.ellipse(-0.5,2.2,bw*0.5,bh*0.38,0,0,Math.PI); g.fill();
+
+  // 胸の模様
+  if(sp.chestStripes){          // キンカチョウ: 胸の縞
+    g.strokeStyle='#3a3a3a'; g.lineWidth=0.7;
+    for(let i=0;i<4;i++){ g.beginPath(); g.moveTo(2+i*1.4,-2); g.lineTo(1+i*1.4,2.5); g.stroke(); }
+  }
+  if(sp.scallop){               // ウロコインコ: うろこ模様
+    g.strokeStyle='rgba(240,240,230,.8)'; g.lineWidth=0.7;
+    for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+      g.beginPath(); g.arc(-1+c*2.6, -1.5+r*2.2, 1.2, 0.15*Math.PI, 0.85*Math.PI); g.stroke();
+    }
+  }
+  if(sp.barring){               // サザナミ: さざ波模様
+    g.strokeStyle='rgba(40,70,30,.5)'; g.lineWidth=0.6;
+    for(let i=0;i<4;i++){ g.beginPath(); g.moveTo(-5,-3+i*2); g.lineTo(5,-3.8+i*2); g.stroke(); }
+  }
+  if(sp.flankDots){             // キンカチョウ: わき腹の白点
+    g.fillStyle='#8a5a3a';
+    g.beginPath(); g.ellipse(-2.5,2.5,2.6,1.6,0,0,Math.PI*2); g.fill();
+    g.fillStyle='#fff';
+    [[-3.6,2.2],[-1.8,3.1],[-2.9,3.4]].forEach(([px,py])=>{ g.beginPath(); g.arc(px,py,0.45,0,Math.PI*2); g.fill(); });
+  }
+
+  // 頭
+  const hx=bw*0.52, hy=-bh*0.45;
+  g.fillStyle=sp.headC;
+  g.beginPath(); g.arc(hx,hy,5.2,0,Math.PI*2); g.fill();
+
+  // 冠羽
+  if(sp.crestC){
+    g.fillStyle=sp.crestC;
+    if(sp.crestType==='spike'){          // オカメ: 細く立つ
+      g.beginPath(); g.moveTo(hx-1,hy-4.5); g.quadraticCurveTo(hx-0.5,hy-11,hx+2.2,hy-10);
+      g.quadraticCurveTo(hx+1.2,hy-6,hx+2.4,hy-4); g.closePath(); g.fill();
+    } else if(sp.crestType==='bigspike'){ // キバタン: 大きく反る黄冠
+      g.beginPath(); g.moveTo(hx-1.5,hy-4.5); g.quadraticCurveTo(hx+1,hy-12,hx+6,hy-9);
+      g.quadraticCurveTo(hx+3,hy-6,hx+3.5,hy-3.5); g.closePath(); g.fill();
+    } else {                              // round: モモイロ・タイハクの丸い冠
+      g.beginPath(); g.arc(hx+0.5,hy-4.5,3.4,Math.PI*0.9,Math.PI*2.05); g.fill();
+    }
+  }
+
+  // 頬
+  if(sp.cheekC){
+    g.fillStyle=sp.cheekC;
+    g.beginPath(); g.ellipse(hx+1.2,hy+1.2,2.2,2.5,0,0,Math.PI*2); g.fill();
+  }
+
+  // 目(アイリング付き)
+  if(sp.eyeRingC){
+    g.fillStyle=sp.eyeRingC;
+    g.beginPath(); g.arc(hx+1.6,hy-1.2,1.7,0,Math.PI*2); g.fill();
+  }
+  g.fillStyle=sp.eyeC||'#2a1a1a';
+  g.beginPath(); g.arc(hx+1.6,hy-1.2,1.0,0,Math.PI*2); g.fill();
+
+  // 嘴
+  g.fillStyle=sp.beakC;
+  if(sp.beakType==='cone'){             // フィンチ系: 円すい
+    g.beginPath(); g.moveTo(hx+4.6,hy-0.6); g.lineTo(hx+8,hy+0.6); g.lineTo(hx+4.6,hy+1.8); g.closePath(); g.fill();
+  } else if(sp.beakType==='thickcone'){ // 文鳥: 太い嘴
+    g.beginPath(); g.moveTo(hx+4.2,hy-1.6); g.lineTo(hx+8.2,hy+0.8); g.lineTo(hx+4.2,hy+2.8); g.closePath(); g.fill();
+  } else if(sp.beakType==='bighook'){   // 大型オウム: 大きなかぎ嘴
+    g.beginPath(); g.moveTo(hx+4.2,hy-2.2); g.quadraticCurveTo(hx+9.4,hy-1.5,hx+7.4,hy+3.4);
+    g.quadraticCurveTo(hx+6,hy+1.8,hx+4.2,hy+2); g.closePath(); g.fill();
+  } else {                              // hook: 小型インコのかぎ嘴
+    g.beginPath(); g.moveTo(hx+4.4,hy-1.4); g.quadraticCurveTo(hx+7.8,hy-0.8,hx+6.4,hy+2.4);
+    g.quadraticCurveTo(hx+5.4,hy+1.2,hx+4.4,hy+1.4); g.closePath(); g.fill();
+  }
+
+  // 翼(羽ばたき: flap 0閉→1全開)
+  const ang = -0.25 - flap*1.35;        // 下ろした位置から上へ振り上げる
+  g.save();
+  g.translate(-1,-1.5);
+  g.rotate(ang);
+  g.fillStyle=sp.wingC;
+  g.beginPath();
+  g.moveTo(0,0);
+  g.quadraticCurveTo(-bw*0.85,-2.2,-bw*1.15,1.2);
+  g.quadraticCurveTo(-bw*0.6,2.8,0,2);
+  g.closePath(); g.fill();
+  // コンゴウ: 翼の外側を青に
+  if(sp.wing2C){
+    g.fillStyle=sp.wing2C;
+    g.beginPath();
+    g.moveTo(-bw*0.55,0.2);
+    g.quadraticCurveTo(-bw*0.95,-1.6,-bw*1.15,1.2);
+    g.quadraticCurveTo(-bw*0.8,2.4,-bw*0.55,1.8);
+    g.closePath(); g.fill();
+  }
+  // セキセイ: 翼のしま模様
+  if(sp.wingStripes){
+    g.strokeStyle='#2a2a2a'; g.lineWidth=0.8;
+    for(let i=1;i<=3;i++){ g.beginPath(); g.moveTo(-i*3.2,-0.8); g.lineTo(-i*3.2+1.2,2); g.stroke(); }
+  }
+  g.restore();
+  g.restore();
 }
 
 /* 敵の見た目設定を返す(ボスは専用枠、無ければ種別枠) */
@@ -2330,6 +2701,7 @@ function endStage(win){
   save();
   showResult(win, rank, score, base, bonusRows, first);
   win?SFX.clear():SFX.lose();
+  if(win) maybeOfferBird(stageId, first);
 }
 function showResult(win,rank,score,base,bonusRows,first){
   document.getElementById('resTitle').textContent = win?'ステージクリア!':'防衛失敗…';
@@ -2612,6 +2984,118 @@ document.getElementById('weaponSelectCancel').onclick=()=>{
   document.getElementById('ovWeaponSelect').classList.remove('show');
   paused=false; SFX.tap();
 };
+
+/* ================= 仲間を選ぶ / 鳥図鑑 ================= */
+function birdCardCanvas(bird, big){
+  const c=document.createElement('canvas');
+  c.width=big?96:84; c.height=big?72:60;
+  const g=c.getContext('2d');
+  drawBird(g,bird,c.width/2,c.height/2+6,0.5,1);
+  return c;
+}
+function renderBirdSelect(){
+  const grid=document.getElementById('birdSelGrid');
+  grid.innerHTML='';
+  const isRandom = sv.birdParty==='random';
+  document.getElementById('birdRandomBtn').style.background = isRandom ? 'var(--green)' : '#3d5270';
+  document.getElementById('birdRandomBtn').style.color = isRandom ? '#08240f' : '#dbe6f5';
+  BIRDS.forEach(b=>{
+    const unlocked=sv.birdUnlocked.includes(b.id);
+    const sel = !isRandom && Array.isArray(sv.birdParty) && sv.birdParty.includes(b.id);
+    const d=document.createElement('div');
+    d.className='bird-card'+(unlocked?'':' locked')+(sel?' sel':'');
+    if(unlocked){
+      d.appendChild(birdCardCanvas(b));
+      d.innerHTML+='<div class="bname">'+b.name+(sel?' ✓':'')+'</div><div class="bcls">'+b.cls+'</div>';
+      d.onclick=()=>{
+        let party = Array.isArray(sv.birdParty)?sv.birdParty.slice():[];
+        if(party.includes(b.id)) party=party.filter(x=>x!==b.id);
+        else{
+          if(party.length>=5){ alert('同行できるのは5羽までです'); return; }
+          party.push(b.id);
+        }
+        sv.birdParty = party.length?party:'random';
+        save(); SFX.tap(); renderBirdSelect();
+      };
+    } else {
+      const c=birdCardCanvas(b);
+      const g=c.getContext('2d');
+      g.globalCompositeOperation='source-atop';
+      g.fillStyle='#0e1726'; g.fillRect(0,0,c.width,c.height);   // シルエット化
+      d.appendChild(c);
+      d.innerHTML+='<div class="bname">???</div><div class="bcls">'+b.cls+'</div>';
+    }
+    grid.appendChild(d);
+  });
+}
+document.getElementById('birdRandomBtn').onclick=()=>{
+  sv.birdParty='random'; save(); SFX.tap(); renderBirdSelect();
+};
+document.getElementById('goBirds').onclick=()=>{ SFX.tap(); showScreen('scrBirds'); renderBirdSelect(); };
+document.getElementById('birdsBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
+
+function renderBirdDex(){
+  const grid=document.getElementById('birdDexGrid');
+  grid.innerHTML='';
+  const got=sv.birdUnlocked.length;
+  document.getElementById('dexCount').textContent='あつめた鳥: '+got+' / '+BIRDS.length;
+  BIRDS.forEach(b=>{
+    const unlocked=sv.birdUnlocked.includes(b.id);
+    const d=document.createElement('div');
+    d.className='bird-card'+(unlocked?'':' locked');
+    d.style.cursor='default';
+    if(unlocked){
+      d.appendChild(birdCardCanvas(b,true));
+      d.innerHTML+='<div class="bname">'+b.name+' ✓</div><div class="bcls">'+b.cls+'</div>'
+        +'<div class="bdesc">'+b.desc+'</div>';
+    } else {
+      const c=birdCardCanvas(b,true);
+      const g=c.getContext('2d');
+      g.globalCompositeOperation='source-atop';
+      g.fillStyle='#0e1726'; g.fillRect(0,0,c.width,c.height);
+      d.appendChild(c);
+      d.innerHTML+='<div class="bname">???</div><div class="bcls">'+b.cls+'</div>'
+        +'<div class="bdesc">ステージを進めると仲間になる</div>';
+    }
+    grid.appendChild(d);
+  });
+}
+document.getElementById('goBirdDex').onclick=()=>{ SFX.tap(); showScreen('scrBirdDex'); renderBirdDex(); };
+document.getElementById('birdDexBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
+
+/* 鳥の解放: ステージ6/12/18/24の初回クリアで1羽選択、30初回クリアで全解放 */
+function maybeOfferBird(stage, firstClear){
+  if(!firstClear) return;
+  if(stage===30){
+    const rest=BIRDS.filter(b=>!sv.birdUnlocked.includes(b.id));
+    if(rest.length){
+      rest.forEach(b=>sv.birdUnlocked.push(b.id));
+      save(); SFX.birdGet();
+      alert('最終ボスクリア記念!\nすべての鳥が仲間になりました!(鳥図鑑コンプリート)');
+    }
+    return;
+  }
+  if(!BIRD_UNLOCK_STAGES.includes(stage)) return;
+  const rest=BIRDS.filter(b=>!sv.birdUnlocked.includes(b.id));
+  if(!rest.length) return;
+  const grid=document.getElementById('birdPickGrid');
+  grid.innerHTML='';
+  rest.forEach(b=>{
+    const d=document.createElement('div');
+    d.className='bird-card';
+    d.appendChild(birdCardCanvas(b,true));
+    d.innerHTML+='<div class="bname">'+b.name+'</div><div class="bcls">'+b.cls+'</div>'
+      +'<div class="bdesc">'+b.desc+'</div>';
+    d.onclick=()=>{
+      sv.birdUnlocked.push(b.id);
+      save(); SFX.birdGet();
+      document.getElementById('ovBirdPick').classList.remove('show');
+      alert(b.name+'が仲間になった!');
+    };
+    grid.appendChild(d);
+  });
+  document.getElementById('ovBirdPick').classList.add('show');
+}
 
 /* ================= データのバックアップ =================
    v2と同じ「PI1-」+ base64 形式。写真は含まれない。 */
