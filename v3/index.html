@@ -1655,6 +1655,76 @@ function noise(dur,vol,filterHz){
     src.connect(f); f.connect(g); g.connect(c.destination); src.start();
   }catch(e){}
 }
+/* ================= 鳥の鳴き声 =================
+   実在種の特徴(高さ・テンポ・長さ・抑揚)を参考にした、発振器によるオリジナル合成音。
+   録音の使用はしていない。1音ずつ音量エンベロープをかけ、種によってビブラートや
+   ノイズ(ざらつき)を混ぜて質感を変える。 */
+function playNote(t0, freq, dur, type, vol, bendTo, vibHz, vibDepth, harsh){
+  try{
+    const c=ac(), o=c.createOscillator(), g=c.createGain();
+    o.type=type||'sine';
+    if(bendTo){
+      o.frequency.setValueAtTime(freq,t0);
+      o.frequency.exponentialRampToValueAtTime(Math.max(40,bendTo),t0+dur);
+    } else o.frequency.setValueAtTime(freq,t0);
+    let lfo=null;
+    if(vibHz){
+      lfo=c.createOscillator(); const lfoGain=c.createGain();
+      lfo.frequency.value=vibHz; lfoGain.gain.value=vibDepth||18;
+      lfo.connect(lfoGain); lfoGain.connect(o.frequency);
+      lfo.start(t0); lfo.stop(t0+dur+0.02);
+    }
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001,vol),t0+Math.min(0.02,dur*0.3));
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(t0); o.stop(t0+dur+0.02);
+    if(harsh){
+      // 力強い/よく響く種向けに、ノイズをうっすら混ぜて質感を出す
+      const len=Math.floor(c.sampleRate*dur);
+      const buf=c.createBuffer(1,len,c.sampleRate), d=buf.getChannelData(0);
+      for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*(1-i/len);
+      const src=c.createBufferSource(); src.buffer=buf;
+      const f=c.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq*1.3; f.Q.value=1.2;
+      const ng=c.createGain(); ng.gain.value=vol*0.5;
+      src.connect(f); f.connect(ng); ng.connect(c.destination); src.start(t0);
+    }
+  }catch(e){}
+}
+/* 16種の鳴き声パターン。notes: [周波数, 長さ秒, (曲げ先の周波数)] の並び。gap: 音間の間隔。 */
+const BIRD_CALLS={
+  kinka:    { notes:[[1900,.05],[1900,.05]], gap:.09, type:'sine',     vol:.05 },                       // ピッ、ピッ
+  canaria:  { notes:[[1500,.09],[1850,.07],[1400,.08],[2000,.1],[1650,.09]], gap:.015, type:'sine',    vol:.05, vib:7, vibDepth:14 }, // 長め・透明感
+  bunchou:  { notes:[[1500,.07,900]], gap:0, type:'sine',              vol:.06 },                       // ピチュッ(急に下がる)
+  mameruriha:{ notes:[[2500,.045],[2650,.045],[2550,.045]], gap:.025, type:'sine', vol:.045 },           // 高く元気
+  botan:    { notes:[[1050,.08],[1100,.08]], gap:.05, type:'sawtooth', vol:.075 },                       // 少し大きめ
+  kozakura: { notes:[[1500,.06],[1800,.05],[1400,.07,1700]], gap:.03, type:'triangle', vol:.06 },        // 甘えた感じ
+  sekisei:  { notes:[[1700,.03],[1500,.03],[1850,.03],[1600,.03],[1950,.03],[1450,.03]], gap:.015, type:'sine', vol:.04 }, // 喋るような細かさ
+  sazanami: { notes:[[680,.16]], gap:0, type:'sine',                  vol:.032 },                        // 優しく静か
+  uroko:    { notes:[[520,.07],[480,.06]], gap:.03, type:'sawtooth',  vol:.055 },                        // 少し低め
+  okame:    { notes:[[900,.42,1500]], gap:0, type:'triangle',         vol:.065, vib:5, vibDepth:40 },     // 特徴的に伸びる
+  shirohara:{ notes:[[780,.09],[820,.08]], gap:.04, type:'square',    vol:.065 },                        // 元気で太め
+  youmu:    { notes:[[280,.28]], gap:0, type:'sawtooth',              vol:.06, lp:900 },                 // 低く賢そう
+  momoiro:  { notes:[[640,.2]], gap:0, type:'sine',                   vol:.05 },                         // 優しく柔らかい
+  kibatan:  { notes:[[520,.32]], gap:0, type:'sawtooth',               vol:.11, harsh:true },             // 大きく力強い
+  taihaku:  { notes:[[880,.42]], gap:0, type:'sawtooth',               vol:.12, harsh:true, vib:4, vibDepth:30 }, // 非常によく響く
+  kongou:   { notes:[[330,.26],[260,.22]], gap:.06, type:'sawtooth',   vol:.1, harsh:true, lp:1100 },      // 堂々として迫力
+};
+/* 鳥の鳴き声を再生する。x座標に応じて画面中央より端の方が少し小さくなる。個体差でわずかにピッチをずらす。 */
+function playBirdCall(birdId, x){
+  if(sv.muted) return;
+  const call=BIRD_CALLS[birdId]; if(!call) return;
+  try{
+    const c=ac(), t0=c.currentTime;
+    const distMul = 0.7 + 0.3*(1 - Math.min(1, Math.abs((x===undefined?W/2:x)-W/2)/(W/2)));  // 中央=1.0倍、端=0.7倍
+    const pitchJitter = 0.96+Math.random()*0.08;   // 個体差
+    let t=t0;
+    call.notes.forEach(([f,dur,bend])=>{
+      playNote(t, f*pitchJitter, dur, call.type, call.vol*distMul, bend?bend*pitchJitter:undefined, call.vib, call.vibDepth, call.harsh);
+      t += dur + (call.gap||0);
+    });
+  }catch(e){}
+}
 const SFX={
   shoot:()=>beep(680,0.05,'square',0.04), hit:()=>beep(320,0.04,'square',0.05),
   kill:()=>beep(180,0.14,'sawtooth',0.06), leak:()=>beep(110,0.22,'sawtooth',0.09),
@@ -1828,10 +1898,15 @@ function initBirds(){
     poopTarget:null,
     abilityT:0,          // タイマー型能力(絶叫・制圧・突進・応援)の経過フレーム
     startled:0, homing:false,   // 演出用(ゲームオーバー時に驚く/勝利時に巣へ帰る)
+    callCd:60+Math.floor(Math.random()*200),   // 次に鳴くまでのクールタイム(個体差)
   }));
   buildAbilityCtx();
   activeBirds.forEach(b=>{ sv.birdData[b.def.id].sorties++; });
   save();
+  // 戦闘開始: 低確率で1〜2羽が鳴く
+  activeBirds.forEach(b=>{
+    if(Math.random()<0.35) setTimeout(()=>{ if(running) playBirdCall(b.def.id,b.x); }, 200+Math.random()*600);
+  });
 }
 /* 編成から能力の実効値を集計する。仕様の重複上限をここで一括適用する:
    コイン増加は合計+25%まで / 鳥の連射短縮は合計10%まで / 常時スローは合計10%まで /
@@ -1930,6 +2005,26 @@ function updateBirds(){
     b.x=Math.max(PLAYER_X-30, Math.min(W-16, b.x));
     b.y=Math.max(36, Math.min(GROUND-130, b.y));
     b.abilityT++;
+
+    // 待機中の自然な鳴き声(個体ごとにクールタイムを持たせ、鳴きすぎないようにする)
+    if(--b.callCd<=0){
+      b.callCd=240+Math.floor(Math.random()*420);
+      if(Math.random()<0.4){
+        playBirdCall(b.def.id, b.x);
+        // まれに近くの鳥が鳴き返し、会話しているように聞こえさせる
+        if(Math.random()<0.22){
+          const others=activeBirds.filter(o=>o!==b);
+          if(others.length){
+            const partner=others[Math.floor(Math.random()*others.length)];
+            setTimeout(()=>{ if(running && !paused) playBirdCall(partner.def.id, partner.x); }, 260+Math.random()*260);
+            if(others.length>=2 && Math.random()<0.4){
+              const third=others.filter(o=>o!==partner)[Math.floor(Math.random()*(others.length-1))];
+              setTimeout(()=>{ if(running && !paused) playBirdCall(third.def.id, third.x); }, 560+Math.random()*260);
+            }
+          }
+        }
+      }
+    }
   }
   updateTimedAbilities();
 }
@@ -1955,6 +2050,7 @@ function updateTimedAbilities(){
         fx.push({kind:'ring',x:b.x,y:b.y,r:120,life:16});
         SFX.tap(); sv.birdData[b.def.id].uses++;
         addFloat(b.x,b.y-20,'ギャー!!','#ffd94a');
+        playBirdCall(b.def.id, b.x);
       } else if(a.type==='gust' && c.gust){
         // 白翼の制圧: 通常敵を画面幅の2〜3%押し戻す。防衛ライン越え(x<DEF_X)には発動しない
         const px=W*c.gust.dist;
@@ -1971,6 +2067,7 @@ function updateTimedAbilities(){
         c.skyDash.dashY = 120;
         sv.birdData[b.def.id].uses++;
         addFloat(W/2,100,'コンゴウインコ突進!','#e83a3a');
+        playBirdCall(b.def.id, b.x);
       } else if(a.type==='cdBoost'){
         // 桃色の応援: 他の鳥のタイマーを進める(=待ち時間短縮)
         for(const o of activeBirds){ if(o!==b) o.abilityT+=boost; }
@@ -2008,6 +2105,7 @@ function updateTimedAbilities(){
         al.target=inZone; al.active=180; al.timer=al.cd;
         addFloat(inZone.x, inZone.y-130*inZone.scale, '🎯警戒!', '#ff8a3a');
         sv.birdData[al.bird.def.id].uses++;
+        playBirdCall(al.bird.def.id, al.bird.x);
       }
     }
   }
@@ -2278,6 +2376,11 @@ function hitEnemy(e,dmg,death){
     else if(e.deathKind==='grenade'){ e.dvx=3; e.dvy=-6.5; e.rot=0; }
     else if(e.deathKind==='gatling'){ e.rot=0; }
     killed++; combo++; comboTimer=150; maxCombo=Math.max(maxCombo,combo);
+    // 敵撃破: 低確率で鳥が反応して鳴く(鳴きすぎないよう控えめに)
+    if(activeBirds.length && Math.random()<0.03){
+      const cb=activeBirds[Math.floor(Math.random()*activeBirds.length)];
+      playBirdCall(cb.def.id, cb.x);
+    }
     // 必殺ゲージ: 敵種ごとの量を加算、コンボ10の倍数で+10
     ultGauge += (ENEMY_TYPES[e.type]||{gauge:3}).gauge;
     if(combo>0 && combo%10===0){ ultGauge+=10; addFloat(e.x,e.y-124,'ゲージ+10','#5be36b'); }
@@ -2724,6 +2827,10 @@ function triggerVictory(){
   for(let i=0;i<10;i++){
     parts.push({x:40+Math.random()*40,y:GROUND-120-Math.random()*60,vx:(Math.random()-0.5)*0.6,vy:0.5+Math.random()*0.5,life:80,c:i%2?'#f2c9d8':'#e8d84a'});
   }
+  // 嬉しそうに鳴く(全員ではなく、時間差でにぎやかに)
+  activeBirds.forEach((b,i)=>{
+    if(Math.random()<0.7) setTimeout(()=>playBirdCall(b.def.id,b.x), 150+i*180+Math.random()*200);
+  });
 }
 function leak(e){
   const T=ENEMY_TYPES[e.type];
@@ -3904,7 +4011,7 @@ function endStage(win){
   activeBirds.forEach(b=>{
     grantBirdXp.lastSkin=null;
     const ups=grantBirdXp(b.def, xp);
-    if(ups) lvUps.push(b.def.name+' Lv'+sv.birdData[b.def.id].lv);
+    if(ups){ lvUps.push(b.def.name+' Lv'+sv.birdData[b.def.id].lv); playBirdCall(b.def.id, b.x); }
     if(grantBirdXp.lastSkin) bonusRows.push(['🎀 鳥スキン解放!', b.def.name+'に「'+grantBirdXp.lastSkin.name+'」']);
   });
   if(activeBirds.length) bonusRows.push(['鳥の経験値(同行'+activeBirds.length+'羽)','+'+xp+' XP']);
@@ -4012,6 +4119,12 @@ function showScreen(id){
   document.querySelectorAll('.overlay').forEach(s=>s.classList.remove('show'));
   document.getElementById(id).classList.add('show');
   refreshTitle();
+  // ホームへ戻った時: 低確率で持っている鳥のうち1羽が鳴く
+  if(id==='scrTitle' && sv.birdUnlocked.length && Math.random()<0.3){
+    const pool = (Array.isArray(sv.birdParty) && sv.birdParty.length) ? sv.birdParty : sv.birdUnlocked;
+    const pick = pool[Math.floor(Math.random()*pool.length)];
+    setTimeout(()=>playBirdCall(pick, W/2), 300+Math.random()*400);
+  }
 }
 function refreshTitle(){
   document.getElementById('titleCoins').textContent='$'+sv.coins;
@@ -4383,7 +4496,7 @@ function renderBirdSelect(){
         party.push(b.id);
       }
       sv.birdParty = party.length?party:'random';
-      save(); SFX.tap(); renderBirdSelect();
+      save(); playBirdCall(b.id, W/2); renderBirdSelect();
     };
     grid.appendChild(d);
   });
@@ -4401,7 +4514,8 @@ function renderBirdDex(){
   BIRDS.forEach(b=>{
     const d=document.createElement('div');
     d.className='bird-card';
-    d.style.cursor='default';
+    d.style.cursor='pointer';
+    d.onclick=()=>playBirdCall(b.id, W/2);
     // ここも同様に innerHTML+= を使わず、要素を個別に作成して追加する
     d.appendChild(birdCardCanvas(b,true));
     const nameDiv=document.createElement('div');
