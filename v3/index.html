@@ -671,6 +671,77 @@ const BIRDS = [
     wiki:'https://ja.wikipedia.org/wiki/コンゴウインコ_(種名)' },
 ];
 const birdOf = id => BIRDS.find(b=>b.id===id);
+
+/* ================= 鳥育成(レベル1〜10) =================
+   経験値は「一緒にステージへ連れて行く」ことで獲得。
+   通常攻撃力はLv10でも合計+11%(Lv2+3% / Lv4+3% / Lv7+5%)に抑え、
+   仕様の上限(+20%程度まで)を守る。 */
+const BIRD_XP_NEED=[30,45,65,90,120,155,195,240,290];   // Lv1→2, 2→3, … 9→10 に必要な経験値
+function birdLvOf(id){ return (sv.birdData[id]||{lv:1}).lv; }
+function birdAtkMul(lv){ return 1 + (lv>=2?0.03:0) + (lv>=4?0.03:0) + (lv>=7?0.05:0); }
+function birdPoopRate(lv){ return 0.04 + (lv>=6?0.01:0); }   // Lv6で糞発動率+1ポイント
+/* 固有能力の数値: Lv10は各鳥の指定値。それ以外はLv3+5%・Lv8+10%を基本値に乗せる */
+function abilityVal(lv, base, lv10){
+  if(lv>=10) return lv10;
+  return base * (1 + (lv>=3?0.05:0) + (lv>=8?0.10:0));
+}
+/* ステージ終了時の経験値(勝利で満額、敗北は1/3)。ボスステージは1.5倍 */
+function stageXp(stage, win){
+  let xp = 14 + stage*1.4;
+  if(stage%3===0) xp*=1.5;
+  if(!win) xp/=3;
+  return Math.round(xp);
+}
+function grantBirdXp(bird, amount){
+  const d=sv.birdData[bird.id];
+  if(!d || d.lv>=10) return null;
+  d.xp += amount;
+  let ups=0;
+  while(d.lv<10 && d.xp >= BIRD_XP_NEED[d.lv-1]){
+    d.xp -= BIRD_XP_NEED[d.lv-1];
+    d.lv++; ups++;
+    if(d.lv===5) d.r5=true;    // スキン解放権(スキン実装時に使用)
+    if(d.lv===10){ d.r10=true; d.xp=0; }
+  }
+  return ups;
+}
+
+/* --- 16種の固有能力の定義(名前・説明・基本値/Lv10値) ---
+   type: エンジンが参照する処理種別。値はabilityValで自動スケールする。 */
+const BIRD_ABILITIES={
+  kinka:    { name:'小さな幸運',   type:'stageCoin',  base:0.05, lv10:0.10,
+    desc:'ステージ終了時の獲得コイン+5%(Lv10で+10%)' },
+  canaria:  { name:'黄金の歌声',   type:'killCoin',   base:0.05, lv10:0.08,
+    desc:'敵撃破時5%で追加コイン1枚(Lv10で8%)。ボス撃破時は必ず3枚' },
+  bunchou:  { name:'ついばみ追撃', type:'peck',       base:0.08, lv10:0.12, pow:0.20, pow10:0.25,
+    desc:'敵撃破時8%で最前線の敵へ追撃(威力20%)。Lv10で12%/25%' },
+  mameruriha:{ name:'俊敏な迎撃',  type:'frontBonus', base:0.15, lv10:0.25,
+    desc:'最前線の敵への自身の攻撃+15%(Lv10で+25%)' },
+  botan:    { name:'粘着フン爆弾', type:'poopDur',    base:0.50, lv10:1.00,
+    desc:'自分の糞のスロー時間+50%(Lv10で+100%)。ボスへは半分' },
+  kozakura: { name:'仲良し連携',   type:'partyAtk',   base:0.05, lv10:0.08,
+    desc:'5羽編成の時、鳥全員の攻撃+5%(Lv10で+8%)' },
+  sekisei:  { name:'高速さえずり', type:'birdRate',   base:0.03, lv10:0.05,
+    desc:'鳥全員の連射間隔を3%短縮(Lv10で5%)' },
+  sazanami: { name:'静かな波',     type:'passiveSlow',base:0.03, lv10:0.05,
+    desc:'通常敵全体の速度を常時3%低下(Lv10で5%)。ボスは半分' },
+  uroko:    { name:'いたずら妨害', type:'flinch',     base:0.05, lv10:0.08, dur:12, dur10:18,
+    desc:'命中時5%で敵を0.2秒ひるませる(Lv10で8%/0.3秒)' },
+  okame:    { name:'警戒の冠羽',   type:'alert',      base:0.08, lv10:0.12, cd:600, cd10:480,
+    desc:'防衛ライン間近の敵へ全鳥が集中攻撃+8%(3秒、Lv10で+12%)' },
+  shirohara:{ name:'アクロバット爆撃', type:'killBlast', base:0.06, lv10:0.10, pow:0.20, pow10:0.30,
+    desc:'敵撃破時6%で小範囲ダメージ(威力20%)。Lv10で10%/30%' },
+  youmu:    { name:'戦術模倣',     type:'mimic',      base:1.0, lv10:1.3,
+    desc:'メイン武器の特徴(貫通/爆発/スロー/連鎖)を弱く模倣。Lv10で効果30%強化' },
+  momoiro:  { name:'桃色の応援',   type:'cdBoost',    base:60, lv10:120,
+    desc:'10秒ごとに他の鳥の能力の待ち時間を1秒短縮(Lv10で2秒)' },
+  kibatan:  { name:'威嚇の絶叫',   type:'shout',      base:0.15, lv10:0.20, dur:90, dur10:120,
+    desc:'12秒ごとに通常敵を1.5秒間15%減速(Lv10で20%/2秒)。ボスは5%' },
+  taihaku:  { name:'白翼の制圧',   type:'gust',       base:0.02, lv10:0.03,
+    desc:'15秒ごとに通常敵を画面幅2%押し戻す(Lv10で3%)。ボスは1秒10%減速' },
+  kongou:   { name:'天空の王者',   type:'skyDash',    base:1.00, lv10:1.30, bossPow:0.70, bossPow10:0.90,
+    desc:'20秒ごとに上空を横断突進、進路上の敵へ威力100%(Lv10で130%)。ボスへ70%' },
+};
 /* 鳥の解放ステージ: 6/12/18/24の初回クリアで1羽選択、30初回クリアで全解放 */
 const BIRD_UNLOCK_STAGES=[6,12,18,24];
 
@@ -695,6 +766,7 @@ const DEFAULT_SAVE={
   birdUnlocked:['kinka','canaria','bunchou','mameruriha','botan','kozakura','sekisei','sazanami',
     'uroko','okame','shirohara','youmu','momoiro','kibatan','taihaku','kongou'],   // 全16種を最初から選択可能
   birdParty:'random',
+  birdData:{},   // 鳥ごとの育成記録 {lv,xp,sorties,kills,uses,skin,fav,r5,r10}
   cleared:{},           // {stageId: {rank, score, count, day, dayCount}}
   unlocked:1,           // 解放済み最大ステージ
   fx:'normal', muted:false,
@@ -732,6 +804,23 @@ function load(){
     if(!ultOf(s.eqUlt) || !s.ult[s.eqUlt] || !s.ult[s.eqUlt].own) s.eqUlt='flame';
     // 鳥データの検証: すべての鳥は最初から選択可能
     s.birdUnlocked=BIRDS.map(b=>b.id);
+    // 鳥育成データ: 存在しなければ初期値を自動生成(既存セーブ互換)
+    if(!s.birdData || typeof s.birdData!=='object') s.birdData={};
+    BIRDS.forEach(b=>{
+      const d=s.birdData[b.id];
+      if(!d || typeof d!=='object' || typeof d.lv!=='number'){
+        s.birdData[b.id]={lv:1,xp:0,sorties:0,kills:0,uses:0,skin:null,fav:false,r5:false,r10:false};
+      } else {
+        d.lv=Math.max(1,Math.min(10,Math.round(d.lv)));
+        d.xp=Math.max(0,Number(d.xp)||0);
+        d.sorties=Math.max(0,Number(d.sorties)||0);
+        d.kills=Math.max(0,Number(d.kills)||0);
+        d.uses=Math.max(0,Number(d.uses)||0);
+        if(d.fav!==true) d.fav=false;
+        if(d.r5!==true) d.r5=false;
+        if(d.r10!==true) d.r10=false;
+      }
+    });
     if(s.birdParty!=='random'){
       if(!Array.isArray(s.birdParty)) s.birdParty='random';
       else{
@@ -1226,6 +1315,8 @@ let gatlingRamp=0, pendingRail=0, pendingRailDmg=0;
 let subCd=0, ultGauge=0, subUses=0, ultUses=0, dots=[], sweeps=[], barrierT=0, barrierMul=1;
 let bossSpawned=false, bossDone=false, bossRef=null, bossDmgAcc=0;
 let activeBirds=[];
+let tempSlowMul=0, tempSlowT=0;   // 絶叫などの一時スロー(通常敵)。上限30%
+let birdShotAccum=0;              // 高速さえずり: 連射短縮ぶんの追加射撃の蓄積
 let defHp=10, defMax=10, timeLeft=STAGE_TIME_SEC*60, waves=[], waveIdx=0, waveTimer=0;
 let spawnQueue=[], spawned=0, killed=0, leaked=0, earned=0;
 let combo=0, maxCombo=0, comboTimer=0, shots=0, hits=0, damageTaken=0;
@@ -1260,6 +1351,7 @@ function startStage(id){
   gatlingRamp=0; pendingRail=0; pendingRailDmg=0;
   subCd=0; ultGauge=0; subUses=0; ultUses=0; dots=[]; sweeps=[]; barrierT=0;
   bossSpawned=false; bossDone=false; bossRef=null; bossDmgAcc=0;
+  tempSlowMul=0; tempSlowT=0; birdShotAccum=0;
   document.getElementById('bossBarWrap').classList.remove('show');
   initBirds();
   defMax=defenseHp(id); defHp=defMax;
@@ -1306,15 +1398,57 @@ function partyBirds(){
   }
   return sv.birdParty.map(birdOf).filter(Boolean);
 }
+let abilityCtx=null;   // 出撃中の鳥能力の集計(上限処理済み)
 function initBirds(){
   activeBirds = partyBirds().map((b,i)=>({
-    def:b,
+    def:b, lv:birdLvOf(b.id),
     x:PLAYER_X+60+Math.random()*220, y:GROUND-160-Math.random()*90,
     tx:PLAYER_X+60, ty:GROUND-180,
     wanderT:Math.floor(Math.random()*40),
     flapT:Math.random()*6.28,
     poopTarget:null,
+    abilityT:0,          // タイマー型能力(絶叫・制圧・突進・応援)の経過フレーム
   }));
+  buildAbilityCtx();
+  activeBirds.forEach(b=>{ sv.birdData[b.def.id].sorties++; });
+  save();
+}
+/* 編成から能力の実効値を集計する。仕様の重複上限をここで一括適用する:
+   コイン増加は合計+25%まで / 鳥の連射短縮は合計10%まで / 常時スローは合計10%まで /
+   一時スローは合計30%まで / ボスへのスローは合計15%まで / 鳥全体攻撃上昇は合計20%まで */
+function buildAbilityCtx(){
+  const c={ stageCoin:0, killCoin:0, peck:null, frontBonus:0, poopDurMul:1,
+    partyAtk:0, birdRateCut:0, passiveSlow:0, flinch:null, alert:null,
+    killBlast:null, mimic:0, cdBoost:0, shout:null, gust:null, skyDash:null };
+  for(const b of activeBirds){
+    const a=BIRD_ABILITIES[b.def.id]; if(!a) continue;
+    const v=abilityVal(b.lv, a.base, a.lv10);
+    switch(a.type){
+      case 'stageCoin': c.stageCoin+=v; break;
+      case 'killCoin': c.killCoin=Math.max(c.killCoin,v); break;
+      case 'peck': c.peck={rate:v, pow:abilityVal(b.lv,a.pow,a.pow10), bird:b}; break;
+      case 'frontBonus': c.frontBonus=Math.max(c.frontBonus,v); break;
+      case 'poopDur': c.poopDurMul=1+v; break;
+      case 'partyAtk': if(activeBirds.length>=5) c.partyAtk=v; break;   // 4羽以下では発動しない
+      case 'birdRateCut': case undefined: break;
+      case 'birdRate': c.birdRateCut+=v; break;
+      case 'passiveSlow': c.passiveSlow+=v; break;
+      case 'flinch': c.flinch={rate:v, dur:abilityVal(b.lv,a.dur,a.dur10), bird:b}; break;
+      case 'alert': c.alert={atk:v, cd:(b.lv>=10?a.cd10:a.cd), timer:0, active:0, target:null, bird:b}; break;
+      case 'killBlast': c.killBlast={rate:v, pow:abilityVal(b.lv,a.pow,a.pow10), bird:b}; break;
+      case 'mimic': c.mimic=v; break;
+      case 'cdBoost': c.cdBoost=v; break;
+      case 'shout': c.shout={slow:v, dur:(b.lv>=10?a.dur10:a.dur), bird:b}; break;
+      case 'gust': c.gust={dist:v, bird:b}; break;
+      case 'skyDash': c.skyDash={pow:v, bossPow:abilityVal(b.lv,a.bossPow,a.bossPow10), bird:b, active:0, x:0, hit:[]}; break;
+    }
+  }
+  // 重複上限
+  c.stageCoin=Math.min(0.25, c.stageCoin);
+  c.birdRateCut=Math.min(0.10, c.birdRateCut);
+  c.passiveSlow=Math.min(0.10, c.passiveSlow);
+  c.partyAtk=Math.min(0.20, c.partyAtk);
+  abilityCtx=c;
 }
 /* 新しい巡回目標地点を選ぶ(防衛ラインより奥〜画面中ほどの上空を自由に飛び回る) */
 function pickBirdTarget(b){
@@ -1360,26 +1494,139 @@ function updateBirds(){
     // 画面内(上空)に収める
     b.x=Math.max(PLAYER_X-30, Math.min(W-16, b.x));
     b.y=Math.max(36, Math.min(GROUND-130, b.y));
+    b.abilityT++;
   }
+  updateTimedAbilities();
 }
-/* 鳥の攻撃: メイン武器と完全同期(fireMainから呼ばれる)。威力は現在威力の25% */
-function birdsFire(){
-  const dmg=Math.max(1, Math.round(mainDmg()*0.25));
+/* タイマー型の固有能力(絶叫・制圧・突進・応援・警戒)の周期処理 */
+function updateTimedAbilities(){
+  const c=abilityCtx; if(!c) return;
+  const boost = c.cdBoost;   // 桃色の応援: 10秒ごとに他の鳥の待ち時間を短縮
   for(const b of activeBirds){
-    const t=aliveNearest(1)[0];
-    if(!t) return;
+    const a=BIRD_ABILITIES[b.def.id]; if(!a) continue;
+    // 応援対象: クールタイム型(絶叫12s/制圧15s/突進20s/警戒)のみ
+    let interval=0;
+    if(a.type==='shout') interval=720;
+    else if(a.type==='gust') interval=900;
+    else if(a.type==='skyDash') interval=1200;
+    else if(a.type==='cdBoost') interval=600;
+    if(!interval) continue;
+    if(b.abilityT>=interval){
+      b.abilityT=0;
+      if(a.type==='shout' && c.shout){
+        // 威嚇の絶叫: 一時スロー(上限30%)。ボスへは5%(上限15%と併せてhitEnemy側でなくupdate側で適用)
+        tempSlowMul=Math.min(0.30, c.shout.slow);
+        tempSlowT=c.shout.dur;
+        fx.push({kind:'ring',x:b.x,y:b.y,r:120,life:16});
+        SFX.tap(); sv.birdData[b.def.id].uses++;
+        addFloat(b.x,b.y-20,'ギャー!!','#ffd94a');
+      } else if(a.type==='gust' && c.gust){
+        // 白翼の制圧: 通常敵を画面幅の2〜3%押し戻す。防衛ライン越え(x<DEF_X)には発動しない
+        const px=W*c.gust.dist;
+        for(const e of enemies){
+          if(!e.alive || e.x<=DEF_X) continue;
+          if(e.boss){ e.poopT=Math.max(e.poopT||0,60); }   // ボスは押さず1秒減速
+          else e.x=Math.min(W-16, e.x+px);
+        }
+        fx.push({kind:'ring',x:b.x,y:b.y,r:90,life:14});
+        sv.birdData[b.def.id].uses++;
+      } else if(a.type==='skyDash' && c.skyDash && !c.skyDash.active){
+        // 天空の王者: 上空横断突進を開始
+        c.skyDash.active=1; c.skyDash.x=PLAYER_X-20; c.skyDash.hit=[];
+        c.skyDash.dashY = 120;
+        sv.birdData[b.def.id].uses++;
+        addFloat(W/2,100,'コンゴウインコ突進!','#e83a3a');
+      } else if(a.type==='cdBoost'){
+        // 桃色の応援: 他の鳥のタイマーを進める(=待ち時間短縮)
+        for(const o of activeBirds){ if(o!==b) o.abilityT+=boost; }
+        fx.push({kind:'ring',x:b.x,y:b.y,r:60,life:10});
+      }
+    }
+  }
+  // 突進の進行(コンゴウ本体が横断し、進路上の敵へダメージ)
+  if(c.skyDash && c.skyDash.active){
+    const d=c.skyDash;
+    d.x+=9;
+    const kb=activeBirds.find(b=>b.def.id==='kongou');
+    if(kb){ kb.x=d.x; kb.y=d.dashY; kb.tx=d.x; kb.ty=d.dashY; }
+    for(const e of enemies){
+      if(e.alive && !d.hit.includes(e) && Math.abs(e.x-d.x)<50){
+        d.hit.push(e);
+        const pw=e.boss? d.bossPow : d.pow;
+        hitEnemy(e, Math.max(1,Math.round(mainDmg()*pw)), curMain().death);
+        if(e.alive && !e.boss) e.x=Math.min(W-16,e.x+22);
+      }
+    }
+    if(d.x>W+40){ d.active=0; if(kb) pickBirdTarget(kb); }
+  }
+  // 警戒の冠羽(オカメ): 防衛ラインまで残り25%以内に敵が入ったら集中攻撃
+  if(c.alert){
+    const al=c.alert;
+    if(al.timer>0) al.timer--;
+    if(al.active>0){
+      al.active--;
+      if(!al.target || !al.target.alive) al.active=0;
+    } else if(al.timer<=0){
+      const zone = DEF_X + (W-DEF_X)*0.25;
+      const inZone = enemies.filter(e=>e.alive && e.x<=zone).sort((a,b2)=>a.x-b2.x)[0];
+      if(inZone){
+        al.target=inZone; al.active=180; al.timer=al.cd;
+        addFloat(inZone.x, inZone.y-130*inZone.scale, '🎯警戒!', '#ff8a3a');
+        sv.birdData[al.bird.def.id].uses++;
+      }
+    }
+  }
+  if(tempSlowT>0) tempSlowT--;
+}
+/* 鳥の攻撃: メイン武器と完全同期(fireMainから呼ばれる)。威力は現在威力の25%を基準に、
+   レベル補正(最大+11%)・仲良し連携・警戒の冠羽・俊敏な迎撃を掛け合わせる。 */
+function birdsFireOnce(rateMul){
+  const base=mainDmg()*0.25;
+  const front=aliveNearest(1)[0];   // 防衛ラインに最も近い敵
+  if(!front) return;
+  const alertOn = abilityCtx.alert && abilityCtx.alert.active>0 && abilityCtx.alert.target && abilityCtx.alert.target.alive;
+  for(const b of activeBirds){
+    // 警戒の冠羽発動中は全員がその敵へ、通常時は最前線の敵へ
+    const t = alertOn ? abilityCtx.alert.target : front;
+    if(!t || !t.alive) return;
+    let dmg = base * birdAtkMul(b.lv) * (1+abilityCtx.partyAtk) * (rateMul||1);
+    if(alertOn) dmg *= (1+abilityCtx.alert.atk);
+    if(t===front && abilityCtx.frontBonus>0 && b.def.id==='mameruriha') dmg *= (1+abilityCtx.frontBonus);
+    dmg=Math.max(1,Math.round(dmg));
     const ty=t.y-70*t.scale;
     const dx=t.x-b.x, dy=ty-b.y, d=Math.hypot(dx,dy)||1;
-    bullets.push({kind:'birdshot',x:b.x+8,y:b.y,vx:dx/d*10,vy:dy/d*10,dmg,life:70});
-    // 特殊能力: 約4%の確率で、その敵の頭上まで実際に飛んでいって糞を落とす。
-    // (今すぐ落とすのではなく、poopTargetを設定してupdateBirds側で移動→到着→投下する)
-    if(!b.poopTarget && Math.random()<0.04){
+    const shot={kind:'birdshot',x:b.x+8,y:b.y,vx:dx/d*10,vy:dy/d*10,dmg,life:70,fromBird:b};
+    // 戦術模倣(ヨウム): メイン武器の特徴を弱く引き継ぐ
+    if(abilityCtx.mimic>0 && b.def.id==='youmu'){
+      const wid=curMain().id, m=abilityCtx.mimic;
+      if(wid==='beam'||wid==='rail') shot.mimicPierce=1;
+      else if(wid==='plasma'||wid==='grenade') shot.mimicBlast=0.3*m;
+      else if(wid==='freeze'||wid==='sonic') shot.mimicSlow=Math.round(40*m);
+      else if(wid==='shock') shot.mimicChain=0.3*m;
+    }
+    bullets.push(shot);
+    // 糞: 発動率はレベルで+1pt(Lv6)。実際に敵の頭上まで飛んで投下する
+    if(!b.poopTarget && Math.random()<birdPoopRate(b.lv)){
       b.poopTarget = t;
     }
   }
 }
+function birdsFire(){
+  birdsFireOnce(1);
+  // 高速さえずり: 連射間隔n%短縮ぶんを「追加の一斉射撃」として蓄積発動する近似。
+  // (鳥はメイン武器と同期発射のため、間隔自体は変えずに手数で等価にする)
+  if(abilityCtx.birdRateCut>0){
+    birdShotAccum += abilityCtx.birdRateCut;
+    if(birdShotAccum>=1){ birdShotAccum-=1; birdsFireOnce(1); }
+  }
+}
 function drawBirds(){
   for(const b of activeBirds){
+    // Lv10専用オーラ(金色のうすい輪)
+    if(b.lv>=10){
+      ctx.strokeStyle='rgba(255,217,74,.45)'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.def.size*0.75+Math.sin(performance.now()/200)*2,0,Math.PI*2); ctx.stroke();
+    }
     // 羽ばたき: sinを0..1に正規化
     const flap=(Math.sin(b.flapT)+1)/2;
     drawBird(ctx,b.def,b.x,b.y,flap,1);
@@ -1490,6 +1737,12 @@ function updateBoss(e){
   if(move){
     let sp2=Math.max(e.baseSpd*0.2, sp);
     if(e.poopT>0){ e.poopT--; sp2*=0.8; }      // 糞はボスにも有効(20%減速)
+    // 鳥のスローはボスへは半分の効果。合算上限15%
+    if(abilityCtx){
+      let slow=(abilityCtx.passiveSlow + (tempSlowT>0?tempSlowMul:0))*0.5;
+      slow=Math.min(0.15, slow);
+      sp2*=(1-slow);
+    }
     e.x-=sp2;
     e.walk+=0.1;
   }
@@ -1539,6 +1792,38 @@ function hitEnemy(e,dmg,death){
     ultGauge += (ENEMY_TYPES[e.type]||{gauge:3}).gauge;
     if(combo>0 && combo%10===0){ ultGauge+=10; addFloat(e.x,e.y-124,'ゲージ+10','#5be36b'); }
     ultGauge=Math.min(ultGauge, 999);
+    // 鳥の撃破時能力
+    if(abilityCtx){
+      // 黄金の歌声(カナリア): 追加コイン。ボス撃破は必ず3枚
+      if(abilityCtx.killCoin>0){
+        const band=COIN_TABLE[coinBand(stageId)];
+        const r=band[e.type]||band.normal;
+        const one=Math.round((r[0]+r[1])/2);
+        if(e.boss){
+          earned+=one*3; addFloat(e.x,e.y-140,'♪ +$'+(one*3),'#ffd94a'); SFX.poop();
+        } else if(Math.random()<abilityCtx.killCoin){
+          earned+=one; addFloat(e.x+14,e.y-118,'♪ +$'+one,'#ffd94a');
+        }
+      }
+      // ついばみ追撃(文鳥): 低確率で最前線の敵へ追撃
+      const pk=abilityCtx.peck;
+      if(pk && Math.random()<pk.rate){
+        const front=enemies.filter(o=>o.alive&&o!==e).sort((a,b2)=>a.x-b2.x)[0];
+        if(front){
+          hitEnemy(front, Math.max(1,Math.round(mainDmg()*pk.pow)), curMain().death);
+          fx.push({kind:'slash',x:front.x,y:front.y-60*front.scale,life:8});
+          sv.birdData[pk.bird.def.id].uses++;
+        }
+      }
+      // アクロバット爆撃(シロハラ): 低確率で小範囲ダメージ(連鎖爆発は起こさない)
+      const kb=abilityCtx.killBlast;
+      if(kb && !e.fromBlast && Math.random()<kb.rate){
+        const pw=Math.max(1,Math.round(mainDmg()*kb.pow));
+        fx.push({kind:'ring',x:e.x,y:e.y-50,r:60,life:12});
+        for(const o of enemies){ if(o.alive && Math.abs(o.x-e.x)<60){ o.fromBlast=true; hitEnemy(o,pw,curMain().death); o.fromBlast=false; } }
+        sv.birdData[kb.bird.def.id].uses++;
+      }
+    }
     if(e.boss){
       bossDone=true;
       document.getElementById('bossBarWrap').classList.remove('show');
@@ -1799,17 +2084,44 @@ function onProjectileHit(b,e){
     case 'sub_pallet':
       hitEnemy(e,b.dmg,'pallet');
       break;
-    case 'birdshot':
+    case 'birdshot':{
+      const wasAlive=e.alive;
       hitEnemy(e,b.dmg,curMain().death);
+      if(b.fromBird){
+        if(wasAlive && !e.alive) sv.birdData[b.fromBird.def.id].kills++;
+        // いたずら妨害(ウロコ): 命中時に低確率でひるみ(敵ごとに再発動クールタイム)
+        const f=abilityCtx.flinch;
+        if(f && e.alive && !(e.flinchCd>0) && Math.random()<f.rate){
+          if(e.boss){ e.poopT=Math.max(e.poopT||0,30); }   // ボスは停止せず短い減速扱い
+          else e.stunT=Math.max(e.stunT||0, f.dur);
+          e.flinchCd=90;   // 同じ敵への連続発動を防ぐ
+          addFloat(e.x,e.y-116*e.scale,'★','#ffd94a');
+          sv.birdData[f.bird.def.id].uses++;
+        }
+      }
+      // 戦術模倣の追加効果
+      if(b.mimicBlast){ explodeAt(e.x,e.y-50,55,Math.round(b.dmg*b.mimicBlast*3),curMain().death); }
+      if(b.mimicSlow && e.alive){ e.stagger=Math.max(e.stagger||0,b.mimicSlow); }
+      if(b.mimicChain){
+        let best=null,bd=120;
+        for(const o of enemies){ if(o.alive&&o!==e){ const dd=Math.abs(o.x-e.x); if(dd<bd){bd=dd;best=o;} } }
+        if(best) hitEnemy(best, Math.max(1,Math.round(b.dmg*b.mimicChain)), curMain().death);
+      }
+      if(b.mimicPierce && !b.pierced){ b.pierced=true; return; }   // 1体だけ貫通(bulletsループ側でreturn falseしない)
       break;
-    case 'poop':
-      // 糞: ダメージなし。移動速度20%低下を2秒(重ね掛けなし)。ボスにも有効
+    }
+    case 'poop':{
+      // 糞: ダメージなし。移動速度20%低下を2秒(重ね掛けなし)。ボスにも有効。
+      // 粘着フン爆弾(ボタンインコ)は効果時間を延長し、ボスへは延長分を半分にする
       if(!(e.poopT>0)){
-        e.poopT=120;
+        let dur=120*(abilityCtx?abilityCtx.poopDurMul:1);
+        if(e.boss) dur=120+(dur-120)*0.5;
+        e.poopT=Math.round(dur);
         addFloat(e.x,e.y-120*e.scale,'ポフッ 💩','#f0f0e0');
         SFX.poop();
       }
       break;
+    }
   }
 }
 function leak(e){
@@ -1898,6 +2210,11 @@ function update(){
           if(b.hitList.length>=b.pierce) return false;
           continue;
         }
+        if(b.kind==='birdshot' && b.mimicPierce && !b.pierced){
+          // ヨウムの模倣貫通: 1体目はそのまま通過して2体目まで届く
+          onProjectileHit(b,e);
+          continue;
+        }
         onProjectileHit(b,e); return false;
       }
     }
@@ -1965,6 +2282,13 @@ function update(){
     let sp = e.stagger>0 ? e.spd*0.4 : e.spd;  // ふらつき中は減速
     if(e.stagger>0) e.stagger--;
     if(e.poopT>0){ e.poopT--; sp*=0.8; }       // 糞: 20%減速
+    if(e.flinchCd>0) e.flinchCd--;
+    // 鳥の常時スロー+一時スロー(通常敵への合算は最大30%に制限)
+    if(abilityCtx){
+      let slow=abilityCtx.passiveSlow + (tempSlowT>0?tempSlowMul:0);
+      slow=Math.min(0.30, slow);
+      sp*=(1-slow);
+    }
     e.x-=sp; e.walk+=0.12;
     if(e.x<=DEF_X) leak(e);
   }
@@ -2739,6 +3063,21 @@ function endStage(win){
     sv.cleared[stageId] = { rank:bestRank, score:best, count:(rec?rec.count:0)+1, day, dayCount };
     if(stageId>=sv.unlocked && stageId<30) sv.unlocked=stageId+1;
   }
+  // 小さな幸運(キンカチョウ): ステージ終了時の獲得コイン増加(上限+25%)
+  if(abilityCtx && abilityCtx.stageCoin>0 && earned>0){
+    const add=Math.round(earned*abilityCtx.stageCoin);
+    earned+=add; sv.coins+=add;
+    bonusRows.push(['小さな幸運(鳥) +'+Math.round(abilityCtx.stageCoin*100)+'%','+$'+add.toLocaleString()]);
+  }
+  // 鳥の経験値: 連れて行った鳥全員に付与(勝利で満額、敗北で1/3)
+  const xp=stageXp(stageId, win);
+  const lvUps=[];
+  activeBirds.forEach(b=>{
+    const ups=grantBirdXp(b.def, xp);
+    if(ups) lvUps.push(b.def.name+' Lv'+sv.birdData[b.def.id].lv);
+  });
+  if(activeBirds.length) bonusRows.push(['鳥の経験値(同行'+activeBirds.length+'羽)','+'+xp+' XP']);
+  lvUps.forEach(t=>bonusRows.push(['🐤 レベルアップ!',t]));
   save();
   showResult(win, rank, score, base, bonusRows, first);
   win?SFX.clear():SFX.lose();
@@ -3076,8 +3415,14 @@ function renderBirdSelect(){
     d.appendChild(nameDiv);
     const clsDiv=document.createElement('div');
     clsDiv.className='bcls';
-    clsDiv.textContent=b.cls;
+    const bd=sv.birdData[b.id];
+    clsDiv.textContent=b.cls+' ・ Lv'+bd.lv;
     d.appendChild(clsDiv);
+    const abDiv=document.createElement('div');
+    abDiv.className='bdesc';
+    abDiv.style.color='#c9a0e8';
+    abDiv.textContent=BIRD_ABILITIES[b.id]?BIRD_ABILITIES[b.id].name:'';
+    d.appendChild(abDiv);
     d.onclick=()=>{
       let party = Array.isArray(sv.birdParty)?sv.birdParty.slice():[];
       if(party.includes(b.id)) party=party.filter(x=>x!==b.id);
@@ -3119,7 +3464,31 @@ function renderBirdDex(){
     descDiv.className='bdesc';
     descDiv.textContent=b.desc;
     d.appendChild(descDiv);
-    // ゲーム内の姿がメイン。実物の参考写真はおまけとして下に小さくリンクを添える
+    // 育成情報
+    const bd=sv.birdData[b.id];
+    const lvDiv=document.createElement('div');
+    lvDiv.className='bname';
+    lvDiv.style.color= bd.lv>=10 ? '#ffd94a' : '#5be36b';
+    lvDiv.textContent='Lv'+bd.lv+(bd.lv>=10?' (最大)':'');
+    d.appendChild(lvDiv);
+    if(bd.lv<10){
+      const xpDiv=document.createElement('div');
+      xpDiv.className='bcls';
+      xpDiv.textContent='次まで '+(BIRD_XP_NEED[bd.lv-1]-bd.xp)+' XP';
+      d.appendChild(xpDiv);
+    }
+    const ab=BIRD_ABILITIES[b.id];
+    if(ab){
+      const abDiv=document.createElement('div');
+      abDiv.className='bdesc';
+      abDiv.style.color='#c9a0e8';
+      abDiv.textContent='【'+ab.name+'】'+ab.desc;
+      d.appendChild(abDiv);
+    }
+    const recDiv=document.createElement('div');
+    recDiv.className='bcls';
+    recDiv.textContent='出撃'+bd.sorties+'回 / 撃破'+bd.kills;
+    d.appendChild(recDiv);
     grid.appendChild(d);
   });
 }
