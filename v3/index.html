@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="フォトインベージョン30">
 <meta name="theme-color" content="#1c2a3d">
-<title>フォトインベージョン 30ステージ版</title>
+<title>Nest Guardians 巣を守る者たち</title>
 <style>
   :root{ --ui:#ffd94a; --danger:#ff4a4a; --panel:#0f1826; --green:#5be36b; --sub:#a06bc9; }
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -22,6 +22,11 @@
     justify-content:center;gap:12px;padding:16px;background:#101b2c;z-index:20;overflow-y:auto;}
   .screen.show{display:flex;}
   h1{font-size:clamp(20px,5.5vw,32px);color:var(--green);text-shadow:2px 3px 0 #1c6b2c;text-align:center;}
+  #titleCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:0;}
+  .title-ui{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;
+    gap:12px;padding:16px;width:100%;}
+  #scrTitle h1{text-shadow:2px 3px 0 #1c6b2c, 0 0 18px rgba(6,10,18,.8);}
+  #scrTitle .btn, #scrTitle .coin-badge{box-shadow:0 4px 0 rgba(0,0,0,.35), 0 2px 14px rgba(6,10,18,.5);}
   .hint{color:#8fa5c4;font-size:12px;text-align:center;line-height:1.7;}
   .btn{background:var(--ui);color:#3a2c00;border:none;border-radius:14px;
     padding:14px 30px;font-size:16px;font-weight:bold;cursor:pointer;min-width:200px;
@@ -220,8 +225,10 @@
 <div class="pad" id="btnUlt">必殺<div class="cd hide" id="cdUlt"></div></div>
 
 <!-- タイトル -->
-<div class="screen show" id="scrTitle">
-  <h1>PHOTO INVASION 30</h1>
+<div class="screen show" id="scrTitle" style="background:transparent;overflow:hidden;">
+  <canvas id="titleCanvas"></canvas>
+  <div class="title-ui">
+  <h1 style="line-height:1.25;">Nest Guardians<br><span style="font-size:0.5em;">巣を守る者たち</span></h1>
   <div class="coin-badge" id="titleCoins">$0</div>
   <button class="btn sub" id="goDiff">難易度: <span id="diffLabel">NORMAL</span></button>
   <button class="btn sub" id="goPlayerSkin">主人公スキン</button>
@@ -235,6 +242,7 @@
   <button class="btn sub" id="goSettings">設定</button>
   <p class="hint" id="titleInfo"></p>
   <p class="hint" style="color:#ff8a3a;">開発中の新バージョンです<br>今のゲームは <b>/photo-invasion/</b> のまま遊べます</p>
+  </div>
 </div>
 
 <!-- ステージ選択 -->
@@ -1155,6 +1163,204 @@ function fitCanvas(){
   cv.style.width=(W*s)+'px'; cv.style.height=(H*s)+'px';
 }
 addEventListener('resize', fitCanvas); fitCanvas();
+
+/* ================= ホーム画面の庭 ================= */
+const titleCv=document.getElementById('titleCanvas');
+const titleCtx=titleCv.getContext('2d');
+let titleRunning=false, titleBirds=[], titleParts=[], titleTimeT=0;
+function fitTitleCanvas(){
+  const dpr=Math.min(2, window.devicePixelRatio||1);
+  const w=titleCv.clientWidth, h=titleCv.clientHeight;
+  if(w<=0||h<=0) return;
+  titleCv.width=Math.round(w*dpr); titleCv.height=Math.round(h*dpr);
+  titleCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize', ()=>{ if(titleRunning) fitTitleCanvas(); });
+
+/* 庭に住まわせる鳥を選ぶ(編成があればそれを、なければ解放済みからランダムに最大5羽) */
+function pickTitleBirds(){
+  let ids;
+  if(Array.isArray(sv.birdParty) && sv.birdParty.length) ids=sv.birdParty.slice(0,5);
+  else{
+    const pool=sv.birdUnlocked.slice();
+    for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+    ids=pool.slice(0,4);
+  }
+  return ids.map(birdOf).filter(Boolean);
+}
+function initTitleGarden(){
+  const defs=pickTitleBirds();
+  const perches=[
+    {x:0.16,y:0.60,kind:'roof'}, {x:0.24,y:0.47,kind:'branch'},
+    {x:0.09,y:0.72,kind:'fence'}, {x:0.31,y:0.70,kind:'fence'}, {x:0.20,y:0.40,kind:'branch'},
+  ];
+  titleBirds=defs.map((def,i)=>{
+    const p=perches[i%perches.length];
+    return {
+      def, lv:birdLvOf(def.id), skinId:(sv.birdData[def.id]&&sv.birdData[def.id].skin)||null,
+      perch:p, x:0, y:0, tx:0, ty:0,
+      state:'perch', timer:60+Math.floor(Math.random()*180),
+      flapT:Math.random()*6.28, bob:Math.random()*6.28,
+      callCd:180+Math.floor(Math.random()*400),
+    };
+  });
+  titleParts=[]; titleTimeT=0;
+}
+function titleBirdTargetXY(TW,TH,spot){
+  if(spot==='dish') return { x:TW*0.40, y:TH*0.905 };
+  const p = spot;
+  return { x:TW*p.x, y:TH*p.y };
+}
+function updateTitleGarden(TW,TH){
+  titleTimeT++;
+  if(Math.random()<0.02) titleParts.push({x:TW*0.205+Math.random()*4,y:TH*0.30,vx:0.05+Math.random()*0.08,vy:-0.28,life:70,c:'#e8dfd0',rise:true});
+  titleParts=titleParts.filter(p=>{ p.x+=p.vx; p.y+=p.vy; if(p.rise){p.vy*=0.985;p.vx*=0.99;} return --p.life>0; });
+
+  for(const b of titleBirds){
+    b.flapT += b.def.flapSpd*(b.state==='fly'?1.6:0.5);
+    b.bob += 0.05;
+    if(!b._posSet){ const xy=titleBirdTargetXY(TW,TH,b.perch); b.x=xy.x; b.y=xy.y; b._posSet=true; }
+
+    if(--b.timer>0){
+      if(b.state==='fly'){
+        b.x += (b.tx-b.x)*0.045; b.y += (b.ty-b.y)*0.045;
+      }
+      continue;
+    }
+    // 状態遷移
+    if(b.state==='perch' || b.state==='preen' || b.state==='sleep' || b.state==='drink'){
+      const r=Math.random();
+      if(r<0.30){
+        // 巣・水場・別の止まり木へ飛ぶ
+        const toDish = Math.random()<0.35;
+        const dest = toDish ? titleBirdTargetXY(TW,TH,'dish') : titleBirdTargetXY(TW,TH,b.perch);
+        b.tx=dest.x; b.ty=dest.y; b.state='fly'; b.timer=50+Math.floor(Math.random()*40);
+        b._nextState = toDish?'drink':'perch';
+      } else if(r<0.55){ b.state='preen'; b.timer=90+Math.floor(Math.random()*90); }
+      else if(r<0.75){ b.state='sleep'; b.timer=150+Math.floor(Math.random()*220); }
+      else { b.state='perch'; b.timer=90+Math.floor(Math.random()*180); }
+      if(b.state!=='fly' && Math.random()<0.12) playBirdCall(b.def.id, b.x);
+    } else if(b.state==='fly'){
+      b.state=b._nextState||'perch'; b.timer=100+Math.floor(Math.random()*200);
+      if(Math.random()<0.2) playBirdCall(b.def.id, b.x);
+    }
+  }
+  // まれに2〜3羽が鳴き交わす(会話演出)
+  if(titleTimeT%211===0 && titleBirds.length>=2 && Math.random()<0.5){
+    const shuffled=titleBirds.slice().sort(()=>Math.random()-0.5).slice(0,2+(Math.random()<0.4?1:0));
+    shuffled.forEach((b,i)=>setTimeout(()=>{ if(titleRunning) playBirdCall(b.def.id,b.x); }, i*260));
+  }
+}
+function drawTitleGarden(){
+  const TW=titleCv.clientWidth, TH=titleCv.clientHeight;
+  if(TW<=0||TH<=0) return;
+  const g=titleCtx;
+  g.clearRect(0,0,TW,TH);
+  // 夕暮れの空
+  const sky=g.createLinearGradient(0,0,0,TH*0.82);
+  sky.addColorStop(0,'#3a4d6e'); sky.addColorStop(0.55,'#6b7ea3'); sky.addColorStop(1,'#e0a25c');
+  g.fillStyle=sky; g.fillRect(0,0,TW,TH*0.82);
+  // 太陽
+  g.fillStyle='rgba(255,214,140,.9)';
+  g.beginPath(); g.arc(TW*0.78,TH*0.30,TW*0.09,0,Math.PI*2); g.fill();
+  // 遠くの丘
+  g.fillStyle='#4a6b52';
+  g.beginPath(); g.moveTo(0,TH*0.80); g.quadraticCurveTo(TW*0.3,TH*0.72,TW*0.6,TH*0.79);
+  g.quadraticCurveTo(TW*0.85,TH*0.84,TW,TH*0.78); g.lineTo(TW,TH*0.86); g.lineTo(0,TH*0.86); g.closePath(); g.fill();
+  // 地面
+  g.fillStyle='#3f6b3a'; g.fillRect(0,TH*0.82,TW,TH*0.18);
+  g.fillStyle='#355e30';
+  for(let i=0;i<Math.ceil(TW/26);i++) g.fillRect(i*26,TH*0.82+((i%3)*5),14,3);
+
+  // 柵
+  g.strokeStyle='#8a6a3a'; g.lineWidth=3;
+  for(let i=0;i<4;i++){ g.beginPath(); g.moveTo(TW*(0.02+i*0.09),TH*0.84); g.lineTo(TW*(0.02+i*0.09),TH*0.74); g.stroke(); }
+  g.beginPath(); g.moveTo(TW*0.01,TH*0.78); g.lineTo(TW*0.30,TH*0.76); g.stroke();
+  g.beginPath(); g.moveTo(TW*0.01,TH*0.82); g.lineTo(TW*0.30,TH*0.80); g.stroke();
+
+  // 家(大きめ、あたたかい灯り)
+  const hx=TW*0.05, hy=TH*0.80, hw=TW*0.30, hh=TH*0.16;
+  g.fillStyle='#8a5a34'; g.fillRect(hx,hy-hh,hw,hh);
+  g.strokeStyle='rgba(0,0,0,.15)'; g.lineWidth=1;
+  for(let i=1;i<6;i++){ g.beginPath(); g.moveTo(hx,hy-i*hh/6); g.lineTo(hx+hw,hy-i*hh/6); g.stroke(); }
+  g.fillStyle='#5c3a1e';
+  g.beginPath(); g.moveTo(hx-hw*0.12,hy-hh); g.lineTo(hx+hw*0.5,hy-hh-hw*0.42); g.lineTo(hx+hw*1.12,hy-hh); g.closePath(); g.fill();
+  g.fillStyle='#7a6a5a'; g.fillRect(hx+hw*0.62,hy-hh-hw*0.32,hw*0.12,hw*0.28);
+  g.fillStyle='#ffd98a'; g.fillRect(hx+hw*0.5,hy-hh*0.68,hw*0.2,hh*0.42);
+  g.strokeStyle='#5c3a1e'; g.lineWidth=1.6; g.strokeRect(hx+hw*0.5,hy-hh*0.68,hw*0.2,hh*0.42);
+  g.fillStyle='#3a2614'; g.fillRect(hx+hw*0.1,hy-hh*0.62,hw*0.16,hh*0.62);
+  g.fillStyle='#e8548a';
+  for(let i=0;i<5;i++){ g.beginPath(); g.arc(hx+i*hw*0.06,hy+4,3,0,Math.PI*2); g.fill(); }
+
+  // 木(巣付き)
+  const tx=hx+hw*1.55, ty=hy;
+  g.fillStyle='#4a3320'; g.fillRect(tx-6,ty-TH*0.30,12,TH*0.30);
+  g.fillStyle='#3a6b3a'; g.beginPath(); g.arc(tx,ty-TH*0.32,TW*0.11,0,Math.PI*2); g.fill();
+  g.fillStyle='#4a8048';
+  g.beginPath(); g.arc(tx-TW*0.06,ty-TH*0.27,TW*0.065,0,Math.PI*2); g.fill();
+  g.beginPath(); g.arc(tx+TW*0.07,ty-TH*0.25,TW*0.06,0,Math.PI*2); g.fill();
+  const nx=tx, ny=ty-TH*0.30;
+  g.strokeStyle='#7a5a30'; g.lineWidth=2.4; g.lineCap='round';
+  for(let i=0;i<7;i++){ const a=(i/7)*Math.PI*2; g.beginPath(); g.moveTo(nx+Math.cos(a)*7,ny+Math.sin(a)*3.5); g.lineTo(nx+Math.cos(a)*17,ny+Math.sin(a)*8); g.stroke(); }
+  g.fillStyle='#6b4e28'; g.beginPath(); g.ellipse(nx,ny+2,18,8,0,0,Math.PI); g.fill();
+  g.strokeStyle='#8a6a3a'; g.lineWidth=1.8; g.beginPath(); g.ellipse(nx,ny,18,8,0,0,Math.PI*2); g.stroke();
+  const eggs=[['#f2ecd8',-8,0],['#ece2c4',0,-1.5],['#f5efe0',8,0]];
+  eggs.forEach(([col,ex,ey])=>{
+    g.fillStyle=col; g.beginPath(); g.ellipse(nx+ex,ny+ey,4.6,5.8,0,0,Math.PI*2); g.fill();
+    g.fillStyle='rgba(255,255,255,.55)'; g.beginPath(); g.ellipse(nx+ex-1.3,ny+ey-2.2,1.2,1.7,0,0,Math.PI*2); g.fill();
+  });
+
+  // 花・低木
+  const flowerC=['#e8548a','#f2c94a','#8fd2ff','#e894b8'];
+  for(let i=0;i<7;i++){
+    const fx=TW*(0.02+i*0.045), fy=TH*(0.83+((i*37)%9)/100);
+    g.strokeStyle='#3a6b3a'; g.lineWidth=1.4; g.beginPath(); g.moveTo(fx,fy+6); g.lineTo(fx,fy); g.stroke();
+    g.fillStyle=flowerC[i%flowerC.length]; g.beginPath(); g.arc(fx,fy-2,2.6,0,Math.PI*2); g.fill();
+  }
+  // 水入れ(鳥の水飲み場)
+  const dx=TW*0.40, dy=TH*0.905;
+  g.fillStyle='#5a6b7a'; g.beginPath(); g.ellipse(dx,dy,16,6,0,0,Math.PI*2); g.fill();
+  g.fillStyle='#8fd2ff'; g.beginPath(); g.ellipse(dx,dy-1,12,4,0,0,Math.PI*2); g.fill();
+
+  // 煙突の煙
+  if(titleTimeT%3===0 && Math.random()<0.5){} // (発生自体はupdate側)
+  for(const p of titleParts){ g.globalAlpha=Math.max(0,p.life/70); g.fillStyle=p.c; g.fillRect(p.x-1.5,p.y-1.5,3,3); }
+  g.globalAlpha=1;
+
+  // 鳥(待機演出: 止まる/飛ぶ/水を飲む/羽づくろい/眠る)
+  for(const b of titleBirds){
+    const bob = b.state==='perch' ? Math.sin(b.bob)*1.5 : 0;
+    const flap = b.state==='fly' ? (Math.sin(b.flapT)+1)/2
+               : b.state==='preen' ? 0.15+Math.abs(Math.sin(b.flapT*1.6))*0.35
+               : b.state==='sleep' ? 0.02
+               : 0.08+Math.sin(b.bob*0.5)*0.05;
+    g.save();
+    if(b.state==='sleep'){ g.translate(0, 1.5); }
+    drawBird(g, b.def, b.x, b.y+bob, flap, b.state==='fly'&&b.tx<b.x?-1:1, b.skinId?birdSkinOf(b.skinId):null);
+    if(b.state==='sleep'){
+      g.fillStyle='#dbe6f5'; g.font='10px sans-serif'; g.textAlign='left';
+      g.fillText('z', b.x+b.def.size*0.3, b.y-b.def.size*0.5);
+    } else if(b.state==='drink' && titleTimeT%40<20){
+      g.strokeStyle='rgba(143,210,255,.8)'; g.lineWidth=1.5;
+      g.beginPath(); g.moveTo(b.x+4,b.y-2); g.lineTo(b.x+4,b.y+6); g.stroke();
+    }
+    g.restore();
+  }
+}
+function titleLoop(){
+  if(!titleRunning) return;
+  updateTitleGarden(titleCv.clientWidth, titleCv.clientHeight);
+  drawTitleGarden();
+  requestAnimationFrame(titleLoop);
+}
+function startTitleGarden(){
+  if(titleRunning) return;
+  titleRunning=true;
+  fitTitleCanvas();
+  initTitleGarden();
+  requestAnimationFrame(titleLoop);
+}
+function stopTitleGarden(){ titleRunning=false; }
 
 /* ================= 写真 ================= */
 const CHAR_KEYS=['hero','normal','fast','heavy','boss'];
@@ -4119,6 +4325,7 @@ function showScreen(id){
   document.querySelectorAll('.overlay').forEach(s=>s.classList.remove('show'));
   document.getElementById(id).classList.add('show');
   refreshTitle();
+  if(id==='scrTitle') startTitleGarden(); else stopTitleGarden();
   // ホームへ戻った時: 低確率で持っている鳥のうち1羽が鳴く
   if(id==='scrTitle' && sv.birdUnlocked.length && Math.random()<0.3){
     const pool = (Array.isArray(sv.birdParty) && sv.birdParty.length) ? sv.birdParty : sv.birdUnlocked;
@@ -4807,6 +5014,7 @@ document.getElementById('resStages').onclick=()=>{ showScreen('scrStages'); rend
 showPads(false);
 refreshMute();
 refreshTitle();
+startTitleGarden();
 </script>
 </body>
 </html>
