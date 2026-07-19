@@ -664,13 +664,13 @@ const SUBS = [
     dmg:[10,12,14,16,19], cd:[9.0,8.3,7.6,6.9,6.2], bind:[2.0,2.3,2.6,3.0,3.5],
     death:'film', ability:'全身を巻いて拘束する' },
   { id:'handlift', name:'ハンドリフト', order:4, basePrice:1100, unlockPrice:6000,
-    dmg:[25,29,34,40,48], cd:[8.0,7.4,6.8,6.2,5.5], death:'handlift', ability:'突進して持ち上げる' },
+    dmg:[25,29,34,40,48], cd:[8.0,7.4,6.8,6.2,5.5], death:'handlift', ability:'突進して持ち上げ、後ろへ押し戻す' },
   { id:'pallet', name:'空パレット投げ', order:5, basePrice:1300, unlockPrice:8000,
-    dmg:[32,37,43,51,61], cd:[7.0,6.5,5.9,5.4,4.8], death:'pallet', ability:'パレットを投げつける(2体まで貫通)' },
+    dmg:[32,37,43,51,61], cd:[7.0,6.5,5.9,5.4,4.8], death:'pallet', ability:'パレットを投げつけ後退させる(2体まで貫通)' },
   { id:'katana', name:'刀', order:6, basePrice:1600, unlockPrice:11000,
-    dmg:[45,52,61,72,86], cd:[6.0,5.6,5.1,4.7,4.1], death:'katana', ability:'近くの敵2体を一閃' },
+    dmg:[45,52,61,72,86], cd:[6.0,5.6,5.1,4.7,4.1], death:'katana', ability:'近くの敵2体を一閃し、後退＋短く足止め' },
   { id:'chainsaw', name:'チェーンソー', order:7, basePrice:2000, unlockPrice:15000,
-    dmg:[12,14,16,19,23], hits:5, cd:[9.0,8.3,7.6,6.9,6.2], death:'chainsaw', ability:'5回連続ヒット' },
+    dmg:[12,14,16,19,23], hits:5, cd:[9.0,8.3,7.6,6.9,6.2], death:'chainsaw', ability:'5回連続ヒットし、その間足止めする' },
   { id:'hammer', name:'巨大ハンマー', order:8, basePrice:2600, unlockPrice:22000,
     dmg:[80,92,108,128,152], cd:[11.0,10.2,9.4,8.5,7.6], death:'hammer', ability:'一撃+周囲にも半分の威力' },
   { id:'barrier', name:'バリア', order:9, basePrice:3200, unlockPrice:30000,
@@ -2896,7 +2896,7 @@ function fireSub(){
     case 'handlift':{
       const t=aliveNearest(1, PLAYER_X+300)[0];
       fx.push({kind:'lift',x:t?t.x:PLAYER_X+150,life:14});
-      if(t){ hitEnemy(t,dmg,'handlift'); if(t.alive) t.x=Math.min(W-16,t.x+40); }
+      if(t){ hitEnemy(t,dmg,'handlift'); if(t.alive) t.x=Math.min(W-16,t.x+72); }
       SFX.s_handlift(); break;
     }
     case 'pallet':
@@ -2905,7 +2905,14 @@ function fireSub(){
     case 'katana':{
       const ts=aliveNearest(2, PLAYER_X+220);
       fx.push({kind:'slash',x:PLAYER_X+120,y:GROUND-58,life:10});
-      ts.forEach(t=>hitEnemy(t,dmg,'katana'));
+      ts.forEach(t=>{
+        hitEnemy(t,dmg,'katana');
+        if(t.alive){
+          t.x=Math.min(W-16, t.x+48);
+          if(!t.boss) t.stunT=Math.max(t.stunT||0, Math.round(30*toughMul(t)));
+          else t.stagger=Math.max(t.stagger||0, 24);
+        }
+      });
       SFX.s_katana(); break;
     }
     case 'chainsaw':{
@@ -3063,6 +3070,7 @@ function onProjectileHit(b,e){
       break;
     case 'sub_pallet':
       hitEnemy(e,b.dmg,'pallet');
+      if(e.alive){ e.x=Math.min(W-16, e.x+58); }
       break;
     case 'birdshot':{
       const wasAlive=e.alive;
@@ -3192,7 +3200,14 @@ function update(){
   // チェーンソーの連続ヒット
   dots=dots.filter(d=>{
     if(!d.e.alive) return false;
-    if(--d.timer<=0){ hitEnemy(d.e,d.dmg,'chainsaw'); d.left--; d.timer=8; }
+    if(--d.timer<=0){
+      hitEnemy(d.e,d.dmg,'chainsaw'); d.left--; d.timer=8;
+      if(d.e.alive){
+        d.e.x=Math.min(W-16, d.e.x+15);
+        if(!d.e.boss) d.e.stunT=Math.max(d.e.stunT||0, Math.round(12*toughMul(d.e)));
+        else d.e.stagger=Math.max(d.e.stagger||0, 10);
+      }
+    }
     return d.left>0 && d.e.alive;
   });
   // 竜巻・フォークリフトの横断攻撃
