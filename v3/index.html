@@ -310,7 +310,7 @@
 <!-- 背景切り抜きエディタ(全身画像モード用) -->
 <div class="screen" id="scrCutout" style="z-index:55;justify-content:flex-start;padding-top:1vh;gap:6px;overflow:hidden;">
   <h1 style="font-size:clamp(15px,4vw,22px);margin-bottom:0;">背景の切り抜き</h1>
-  <p class="hint" id="cutHint" style="margin:0;max-width:660px;font-size:12px;">背景部分をタップすると、つながっている近い色の背景が透明になります。写真が横倒しなら「↺回転」「回転↻」で向きを直せます。</p>
+  <p class="hint" id="cutHint" style="margin:0;max-width:660px;font-size:12px;">背景部分をタップすると、つながっている近い色の背景が透明になります。写真が横倒しなら「↺回転」「回転↻」で向きを直せます。「⇋左右反転」で鏡合わせにできます。</p>
   <div class="cut-tools" id="cutModeRow">
     <button class="cut-btn on" data-cutmode="wand">背景をタップ</button>
     <button class="cut-btn" data-cutmode="erase">消しゴム</button>
@@ -329,6 +329,7 @@
     <button class="cut-btn" id="cutReset">最初から</button>
     <button class="cut-btn" id="cutRotL">↺回転</button>
     <button class="cut-btn" id="cutRotR">回転↻</button>
+    <button class="cut-btn" id="cutFlipH">⇋左右反転</button>
     <button class="cut-btn" id="cutZoomOut">−</button>
     <button class="cut-btn" id="cutZoomIn">＋</button>
   </div>
@@ -1701,8 +1702,27 @@ function cutRotate(clockwise){
   cutHistory=[]; cutRedo=[]; cutRefreshBtns();
   fitCutView(); cutUpdatePreview(); SFX.tap();
 }
+function flipCanvasH(src){
+  const c=document.createElement('canvas');
+  c.width=src.width; c.height=src.height;
+  const g=c.getContext('2d');
+  g.translate(c.width,0); g.scale(-1,1);
+  g.drawImage(src,0,0);
+  return c;
+}
+function cutFlip(){
+  const flippedView = flipCanvasH(cutCanvas);
+  const flippedOrig = flipCanvasH(cutOrigCanvas);
+  cutCtx.clearRect(0,0,cutCanvas.width,cutCanvas.height);
+  cutCtx.drawImage(flippedView,0,0);
+  cutOrigCanvas = flippedOrig;
+  // 反転前後で消しゴム履歴のピクセル配置が一致しなくなるため、回転時と同様に破棄する。
+  cutHistory=[]; cutRedo=[]; cutRefreshBtns();
+  cutUpdatePreview(); SFX.tap();
+}
 document.getElementById('cutRotL').onclick=()=>cutRotate(false);
 document.getElementById('cutRotR').onclick=()=>cutRotate(true);
+document.getElementById('cutFlipH').onclick=()=>cutFlip();
 document.getElementById('cutCancel').onclick=()=>{ closeCutout(); SFX.tap(); };
 document.getElementById('cutApply').onclick=()=>{
   const t=cutTrimmed(8);
