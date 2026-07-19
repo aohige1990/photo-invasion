@@ -254,11 +254,15 @@
 <!-- ショップ(メイン武器) -->
 <div class="screen" id="scrShop" style="justify-content:flex-start;padding-top:2vh;">
   <h1 style="font-size:clamp(17px,4.5vw,24px);">ショップ</h1>
-  <div class="coin-badge" id="shopCoins">$0</div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <div class="coin-badge" id="shopCoins">$0</div>
+    <div class="coin-badge" id="shopCores" style="background:#3a2c5c;">💎0</div>
+  </div>
   <div class="shop-tabs">
     <button class="shop-tab on" data-tab="main">メイン</button>
     <button class="shop-tab" data-tab="sub">サブ</button>
     <button class="shop-tab" data-tab="ult">必殺技</button>
+    <button class="shop-tab" data-tab="awaken">覚醒</button>
   </div>
   <div id="shopList"></div>
   <button class="btn sub" id="shopBack">タイトルへ</button>
@@ -539,6 +543,74 @@ const defenseHp = s => s<=10?10:s<=20?12:15;
 const waveCount = s => s<=6?3:s<=15?4:s<=24?5:6;
 const stageOf = id => STAGES[id-1];
 const mainOf  = id => MAINS.find(m=>m.id===id);
+
+/* ================= 武器覚醒 =================
+   NORMAL全30ステージクリア後、Lv5の武器をコイン+覚醒コアで覚醒できる。
+   覚醒後は継続的なレベルアップをしない代わりに、基礎威力+20%と固有能力が1つ付く。
+   どの敵にも最強、という覚醒武器は作らない(得意/不得意を明記)。 */
+const AWAKEN={
+  handgun: { name:'デザートイーグル(覚醒)', cost:15000, cores:1, ability:'homing',
+    desc:'弾がわずかに敵を追尾するようになる', good:'高速敵', bad:'装甲敵', color:'#ffd94a' },
+  sonic:   { name:'共鳴音波砲(覚醒)', cost:20000, cores:1, ability:'wideAoe',
+    desc:'衝撃波の範囲が拡大し、巻き込んだ敵にも減衰なしでダメージ', good:'群れ敵', bad:'ボス(単体)', color:'#ffd94a' },
+  shock:   { name:'雷撃コイル(覚醒)', cost:26000, cores:2, ability:'megaChain',
+    desc:'電撃の連鎖数が増え、連鎖した敵を短くひるませる', good:'群れ敵・支援敵', bad:'装甲敵', color:'#8fd2ff' },
+  freeze:  { name:'絶対零度銃(覚醒)', cost:32000, cores:2, ability:'deepFreeze',
+    desc:'凍結時間が延び、凍結中は誰の攻撃でもダメージ増加', good:'高速敵・ボス', bad:'耐性敵', color:'#bfe6ff' },
+  shotgun: { name:'制圧ショットガン(覚醒)', cost:38000, cores:2, ability:'megaKnock',
+    desc:'ノックバックが大幅強化され、防衛ライン直前の敵を押し返す', good:'群れ敵・防衛直前', bad:'遠方のボス', color:'#ffb43a' },
+  beam:    { name:'貫通ビームライフル(覚醒)', cost:46000, cores:3, ability:'fullPierce',
+    desc:'画面上の敵をすべて貫通するようになる', good:'装甲敵・群れ敵', bad:'ボス(単体では恩恵薄)', color:'#8fd2ff' },
+  gatling: { name:'デュアルガトリング(覚醒)', cost:58000, cores:3, ability:'frontPriority',
+    desc:'防衛ラインに最も近い敵への威力が上がる', good:'高速敵の突破阻止', bad:'ボス(遠方)', color:'#ffd94a' },
+  plasma:  { name:'プラズマキャノン(覚醒)', cost:72000, cores:4, ability:'burn',
+    desc:'着弾地点が燃え続け、居座る敵に継続ダメージ', good:'装甲敵・ボス', bad:'高速で通り過ぎる敵', color:'#c77dff' },
+  grenade: { name:'クラスターランチャー(覚醒)', cost:90000, cores:4, ability:'splitShot',
+    desc:'爆発が破片弾を追加でまき散らす', good:'群れ敵', bad:'ボス(単体)', color:'#ff8a3a' },
+  rail:    { name:'重力レールガン(覚醒)', cost:120000, cores:5, ability:'suction',
+    desc:'発射前に敵をわずかに引き寄せ、隊列を揃えて撃ち抜く', good:'散開した群れ敵', bad:'単体のボス', color:'#ffd94a' },
+};
+/* 覚醒チップ10種。最大2個装着、威力系の合計上限は+15%まで(hitEnemy側で一括制限) */
+const CHIPS=[
+  { id:'pierce',  name:'貫通チップ',   cost:8000,  desc:'貫通数+1' },
+  { id:'blast',   name:'範囲チップ',   cost:8000,  desc:'爆発範囲+10%' },
+  { id:'speed',   name:'速度チップ',   cost:9000,  desc:'連射間隔を5%短縮' },
+  { id:'knock',   name:'制圧チップ',   cost:7000,  desc:'ノックバック効果+10%' },
+  { id:'cool',    name:'冷却チップ',   cost:9000,  desc:'固有能力の発動間隔を8%短縮' },
+  { id:'track',   name:'追尾チップ',   cost:8500,  desc:'弾の追尾性能を強化' },
+  { id:'antiArmor', name:'対装甲チップ', cost:10000, desc:'装甲敵へのダメージ+10%', dmgPct:0.10, vs:'armor' },
+  { id:'antiQuick', name:'対高速チップ', cost:10000, desc:'高速敵へのダメージ+10%', dmgPct:0.10, vs:'quick' },
+  { id:'antiBoss',  name:'対ボスチップ', cost:12000, desc:'ボスへのダメージ+8%', dmgPct:0.08, vs:'boss' },
+  { id:'collect', name:'収集チップ',   cost:7000,  desc:'敵撃破時のコイン獲得量+5%', coinPct:0.05 },
+];
+const chipOf = id => CHIPS.find(c=>c.id===id);
+const CHIP_DMG_CAP=0.15;   // 威力に関わるチップ効果の合計上限
+function isAwakened(wid){ return !!(sv.awaken[wid] && sv.awaken[wid].on); }
+function mainDisplayName(wid){ return isAwakened(wid) ? AWAKEN[wid].name : mainOf(wid).name; }
+function awakenOf(wid){ return sv.awaken[wid]; }
+/* 現在装備中のメイン武器に付いているチップの効果を集計する(上限つき) */
+function equippedChipEffects(wid){
+  const a=sv.awaken[wid];
+  const out={ pierce:0, blastPct:0, ratePct:0, knockPct:0, coolPct:0, track:false, dmgPct:0, coinPct:0, vsArmor:0, vsQuick:0, vsBoss:0 };
+  if(!a || !a.on) return out;
+  let dmgSum=0;
+  (a.chips||[]).forEach(cid=>{
+    const c=chipOf(cid); if(!c) return;
+    if(c.id==='pierce') out.pierce+=1;
+    if(c.id==='blast') out.blastPct+=0.10;
+    if(c.id==='speed') out.ratePct+=0.05;
+    if(c.id==='knock') out.knockPct+=0.10;
+    if(c.id==='cool') out.coolPct+=0.08;
+    if(c.id==='track') out.track=true;
+    if(c.id==='collect') out.coinPct+=0.05;
+    if(c.dmgPct){ dmgSum+=c.dmgPct; if(c.vs==='armor') out.vsArmor+=c.dmgPct; if(c.vs==='quick') out.vsQuick+=c.dmgPct; if(c.vs==='boss') out.vsBoss+=c.dmgPct; }
+  });
+  if(dmgSum>CHIP_DMG_CAP){   // 威力系合計は+15%までに圧縮
+    const r=CHIP_DMG_CAP/dmgSum;
+    out.vsArmor*=r; out.vsQuick*=r; out.vsBoss*=r;
+  }
+  return out;
+}
 const UP_COST_MUL=[1,2,4,7];
 const upgradeCost=(base,fromLv)=>base*UP_COST_MUL[fromLv-1];
 
@@ -830,6 +902,9 @@ const DEFAULT_SAVE={
   sub:{punch:{own:true,lv:1}},
   ult:{flame:{own:true,lv:1}},
   eqMain:'handgun', eqSub:'punch', eqUlt:'flame',
+  awaken:{},        // {weaponId:{on:true, chips:[chipId,chipId]}}
+  cores:0,          // 覚醒コア所持数
+  chipsOwned:[],    // 所持している覚醒チップID
   birdUnlocked:['kinka','canaria','bunchou','mameruriha','botan','kozakura','sekisei','sazanami',
     'uroko','okame','shirohara','youmu','momoiro','kibatan','taihaku','kongou'],   // 全16種を最初から選択可能
   birdParty:'random',
@@ -878,6 +953,19 @@ function load(){
     }
     if(!s.ult.flame) s.ult.flame={own:true,lv:1};
     if(!ultOf(s.eqUlt) || !s.ult[s.eqUlt] || !s.ult[s.eqUlt].own) s.eqUlt='flame';
+    // 覚醒データの検証
+    if(!s.awaken || typeof s.awaken!=='object') s.awaken={};
+    for(const wid of Object.keys(s.awaken)){
+      if(!AWAKEN[wid]){ delete s.awaken[wid]; continue; }
+      const a=s.awaken[wid];
+      if(!a || typeof a!=='object'){ delete s.awaken[wid]; continue; }
+      a.on=!!a.on;
+      if(!Array.isArray(a.chips)) a.chips=[];
+      a.chips=a.chips.filter(c=>chipOf(c)).slice(0,2);
+    }
+    if(typeof s.cores!=='number' || !isFinite(s.cores) || s.cores<0) s.cores=0;
+    if(!Array.isArray(s.chipsOwned)) s.chipsOwned=[];
+    s.chipsOwned=s.chipsOwned.filter(c=>chipOf(c));
     // 難易度データの検証
     if(!s.cleared || typeof s.cleared!=='object') s.cleared={normal:{},hard:{},expert:{},nightmare:{},hell:{}};
     DIFFS.forEach(d=>{ if(!s.cleared[d.id] || typeof s.cleared[d.id]!=='object') s.cleared[d.id]={}; });
@@ -1415,7 +1503,7 @@ let fireHeld=false, fireCd=0, shake=0, startTime=0;
 
 function curMain(){ return mainOf(sv.eqMain); }
 function curLv(){ const e=sv.main[sv.eqMain]; return e?e.lv:1; }
-function mainDmg(){ const w=curMain(); return w.dmg[curLv()-1]; }
+function mainDmg(){ const w=curMain(); let d=w.dmg[curLv()-1]; if(isAwakened(w.id)) d*=1.2; return d; }
 function mainRate(){ const w=curMain(); return w.rate[curLv()-1]; }
 function curSub(){ return subOf(sv.eqSub); }
 function curSubLv(){ const e=sv.sub[sv.eqSub]; return e?e.lv:1; }
@@ -1466,7 +1554,7 @@ function startStage(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('show'));
   document.querySelectorAll('.overlay').forEach(s=>s.classList.remove('show'));
   document.getElementById('hud').classList.add('show');
-  document.getElementById('btnMain').textContent=curMain().name;
+  document.getElementById('btnMain').textContent=mainDisplayName(sv.eqMain);
   showPads(true);
   refreshHud();
   requestAnimationFrame(loop);
@@ -1918,6 +2006,13 @@ function hitEnemy(e,dmg,death){
     const strong = ['beam','rail','plasma','grenade'].includes(death);
     dmg *= strong ? 1.15 : 0.55;
   }
+  // 覚醒チップ(対装甲/対高速/対ボス): 現在装備中のメイン武器由来のダメージにのみ適用
+  if(curMain().death===death){
+    const chip=equippedChipEffects(curMain().id);
+    if(e.spec==='armor' && chip.vsArmor) dmg*=(1+chip.vsArmor);
+    if(e.spec==='quick' && chip.vsQuick) dmg*=(1+chip.vsQuick);
+    if(e.boss && chip.vsBoss) dmg*=(1+chip.vsBoss);
+  }
   // ボスの特殊防御
   if(e.boss){
     if(e.invincT>0){ addFloat(e.x,e.y-190,'ムテキ','#ffd94a'); return; }
@@ -1931,7 +2026,7 @@ function hitEnemy(e,dmg,death){
     while(bossDmgAcc>=100){ bossDmgAcc-=100; ultGauge=Math.min(999,ultGauge+5); }
   }
   // 冷凍銃Lv5: 凍結中の敵への次の攻撃が1.5倍
-  if(e.frozen>0 && e.freezeBonus){ dmg*=1.5; e.freezeBonus=false; addFloat(e.x,e.y-112,'1.5倍!','#8fd2ff'); }
+  if(e.frozen>0 && e.freezeBonus){ dmg*=1.5; if(!e.freezeDeep) e.freezeBonus=false; addFloat(e.x,e.y-112,'1.5倍!','#8fd2ff'); }
   if(e.shield && !e.shieldUsed){ e.shieldUsed=true; dmg*=0.35; addFloat(e.x,e.y-90,'シールド!','#6ba3e0'); }
   e.hp-=dmg; e.flash=5; hits++;
   SFX.hit();
@@ -1997,10 +2092,18 @@ function hitEnemy(e,dmg,death){
       earned+=bossCoin;
       addFloat(e.x,e.y-160,'ボス撃破! +$'+bossCoin.toLocaleString(),'#ffd94a');
       shake=Math.max(shake,14); SFX.bossKill(); vib([60,40,60,40,120]);
+      // 覚醒コアのドロップ(HARD以上のみ。難易度が上がるほど出やすい)
+      const coreRate={normal:0,hard:0.08,expert:0.12,nightmare:0.18,hell:0.25}[sv.curDiff]||0;
+      if(Math.random()<coreRate){
+        sv.cores++;
+        addFloat(e.x,e.y-190,'💎 覚醒コア獲得!','#c77dff');
+        SFX.birdGet();
+      }
     }
     const band=COIN_TABLE[coinBand(stageId)];
     const r=band[e.type]||band.normal;
-    let coin=Math.round((e.boss?0:(r[0]+Math.random()*(r[1]-r[0]))) * diffOf(sv.curDiff).coinMul);
+    const collectMul = curMain().death===e.deathKind ? (1+equippedChipEffects(curMain().id).coinPct) : 1;
+    let coin=Math.round((e.boss?0:(r[0]+Math.random()*(r[1]-r[0]))) * diffOf(sv.curDiff).coinMul * collectMul);
     earned+=coin;
     if(!e.boss) addFloat(e.x,e.y-100,'+$'+coin,'#ffd94a');
     burst(e.x,e.y-50,TYPE_COLOR[e.type][0],10);
@@ -2011,7 +2114,9 @@ function hitEnemy(e,dmg,death){
 /* ================= メイン武器の発射 ================= */
 function fireMain(){
   const w=curMain(), lv=curLv(), dmg=mainDmg(), rate=mainRate();
-  fireCd=Math.round(60/rate);
+  const chip=equippedChipEffects(w.id);
+  const awake=isAwakened(w.id);
+  fireCd=Math.round(60/rate * (1-chip.ratePct));
   // 銃口の座標(drawPlayerArt内の銃の描画: ローカル座標 x=34,y=-35付近)を
   // 主人公の拡大率(HERO_SCALE)に合わせて実際の画面座標へ変換する
   const bx=PLAYER_X+34*HERO_SCALE, by=GROUND-35*HERO_SCALE;
@@ -2019,41 +2124,64 @@ function fireMain(){
   birdsFire();   // 仲間の鳥もメイン武器と同じタイミングで攻撃
   switch(w.id){
     case 'handgun':
-      bullets.push({kind:'bullet',x:bx,y:by,vx:11,dmg,death:'handgun'}); SFX.w_handgun(); break;
+      // 覚醒(デザートイーグル): 弾がわずかに敵を追尾する
+      bullets.push({kind:'bullet',x:bx,y:by,vx:11,dmg,death:'handgun',
+        pierce:chip.pierce, homing:awake||chip.track}); SFX.w_handgun(); break;
     case 'sonic':
-      bullets.push({kind:'sonic',x:bx,y:by,vx:7,dmg,death:'sonic',lv}); SFX.w_sonic(); break;
+      // 覚醒(共鳴音波砲): 範囲拡大+巻き込み減衰なし
+      bullets.push({kind:'sonic',x:bx,y:by,vx:7,dmg,death:'sonic',lv,
+        pierce:chip.pierce, awakeWide:awake}); SFX.w_sonic(); break;
     case 'shock':
-      bullets.push({kind:'shock',x:bx,y:by,vx:10,dmg,death:'shock',lv}); SFX.w_shock(); break;
+      // 覚醒(雷撃コイル): 連鎖数増加+ひるみ付与
+      bullets.push({kind:'shock',x:bx,y:by,vx:10,dmg,death:'shock',lv,
+        pierce:chip.pierce, awakeChain:awake}); SFX.w_shock(); break;
     case 'freeze':
-      bullets.push({kind:'freeze',x:bx,y:by,vx:9,dmg,death:'freeze',lv}); SFX.w_freeze(); break;
+      // 覚醒(絶対零度銃): 凍結延長+凍結中は誰の攻撃でもダメージ増加
+      bullets.push({kind:'freeze',x:bx,y:by,vx:9,dmg,death:'freeze',lv,
+        pierce:chip.pierce, awakeDeep:awake}); SFX.w_freeze(); break;
     case 'shotgun':{
-      // 扇状に発射。Lv5で本数と広がりが拡大
+      // 扇状に発射。Lv5で本数と広がりが拡大。覚醒(制圧ショットガン)でノックバック大幅強化
       const n=lv>=5?7:5, spread=lv>=5?3.2:2.2;
       for(let i=0;i<n;i++){
         bullets.push({kind:'pellet',x:bx,y:by,vx:9+Math.random()*2,
-          vy:-spread+i*(spread*2/(n-1)),dmg:dmg*0.25,death:'shotgun',life:34});
+          vy:-spread+i*(spread*2/(n-1)),dmg:dmg*0.25,death:'shotgun',life:34,
+          knock:16*(1+chip.knockPct)*(awake?2.2:1)});
       }
       SFX.w_shotgun(); break;
     }
-    case 'beam':
-      beamShot(dmg, lv>=5?5:3); break;
+    case 'beam':{
+      // 覚醒(貫通ビームライフル): 画面上の敵をすべて貫通
+      const maxT = awake ? 999 : (lv>=5?5:3);
+      beamShot(dmg, maxT+chip.pierce); break;
+    }
     case 'gatling':{
-      // 撃ち続けると威力上昇(Lv5で最大20%)
+      // 撃ち続けると威力上昇(Lv5で最大20%)。覚醒(デュアルガトリング)は最前線の敵に追加ダメージ
       const maxR=lv>=5?0.20:0.10;
       gatlingRamp=Math.min(120,gatlingRamp+3);
       const mul=1+maxR*(gatlingRamp/120);
-      bullets.push({kind:'bullet',x:bx,y:by+(Math.random()*10-5),vx:13,dmg:dmg*mul,death:'gatling'});
+      bullets.push({kind:'bullet',x:bx,y:by+(Math.random()*10-5),vx:13,dmg:dmg*mul,death:'gatling',
+        pierce:chip.pierce, awakeFront:awake});
       SFX.w_gatling(); break;
     }
     case 'plasma':
-      bullets.push({kind:'plasma',x:bx,y:by,vx:8,dmg,death:'plasma',lv}); SFX.w_plasma(); break;
+      // 覚醒(プラズマキャノン): 着弾地点が燃え続けて継続ダメージ
+      bullets.push({kind:'plasma',x:bx,y:by,vx:8,dmg,death:'plasma',lv,
+        awakeBurn:awake, blastPct:chip.blastPct}); SFX.w_plasma(); break;
     case 'grenade':
-      bullets.push({kind:'grenade',x:bx,y:by-10,vx:6.5,vy:-8.5,dmg,death:'grenade',lv}); SFX.w_grenade(); break;
-    case 'rail':
-      railShot(dmg);
+      // 覚醒(クラスターランチャー): 爆発が破片弾を追加でまき散らす(レベル問わず)
+      bullets.push({kind:'grenade',x:bx,y:by-10,vx:6.5,vy:-8.5,dmg,death:'grenade',lv,
+        awakeSplit:awake, blastPct:chip.blastPct}); SFX.w_grenade(); break;
+    case 'rail':{
+      // 覚醒(重力レールガン): 発射前に敵を中央へ引き寄せ、3体以上いれば追加威力
+      if(awake){
+        for(const o of enemies){ if(o.alive && o.x>DEF_X+40) o.x-=14; }
+      }
+      const groupBonus = (awake && enemies.filter(o=>o.alive).length>=3) ? 1.15 : 1;
+      railShot(dmg*groupBonus, chip.pierce);
       // Lv5: 一定確率(30%)で2連射
-      if(lv>=5 && Math.random()<0.30){ pendingRail=8; pendingRailDmg=dmg; }
+      if(lv>=5 && Math.random()<0.30){ pendingRail=8; pendingRailDmg=dmg*groupBonus; }
       break;
+    }
   }
 }
 function beamShot(dmg,maxTargets){
@@ -2063,7 +2191,7 @@ function beamShot(dmg,maxTargets){
   fx.push({kind:'beam',y,life:8});
   SFX.w_beam();
 }
-function railShot(dmg){
+function railShot(dmg,pierceExtra){
   const y=GROUND-46;
   enemies.filter(e=>e.alive).forEach(e=>hitEnemy(e,dmg,'rail'));
   fx.push({kind:'rail',y,life:10});
@@ -2190,28 +2318,37 @@ function fireUlt(){
 }
 function onProjectileHit(b,e){
   switch(b.kind){
-    case 'bullet':
-      hitEnemy(e,b.dmg,b.death); break;
+    case 'bullet':{
+      // 覚醒(デュアルガトリング): 防衛ラインに最も近い敵への威力アップ
+      let dmg=b.dmg;
+      if(b.awakeFront){
+        const front=enemies.filter(o=>o.alive).sort((a,c)=>a.x-c.x)[0];
+        if(front===e) dmg*=1.3;
+      }
+      hitEnemy(e,dmg,b.death);
+      break;
+    }
     case 'pellet':
       hitEnemy(e,b.dmg,'shotgun');
-      if(e.alive){ e.x=Math.min(W-16,e.x+16); }   // 吹き飛ばし
+      if(e.alive){ e.x=Math.min(W-16,e.x+(b.knock||16)); }   // 吹き飛ばし(覚醒/チップで強化)
       break;
     case 'sonic':{
-      // 小範囲攻撃+ふらつき(Lv5で延長)
-      fx.push({kind:'ring',x:b.x,y:e.y-50,r:55,life:12});
+      // 小範囲攻撃+ふらつき(Lv5で延長)。覚醒(共鳴音波砲): 範囲拡大+巻き込み減衰なし
+      const r = b.awakeWide ? 85 : 55;
+      fx.push({kind:'ring',x:b.x,y:e.y-50,r,life:12});
       const dur=b.lv>=5?120:75;
       for(const o of enemies){
-        if(o.alive && Math.abs(o.x-e.x)<55){
+        if(o.alive && Math.abs(o.x-e.x)<r){
           o.stagger=Math.max(o.stagger||0,Math.round(dur*toughMul(o)));
-          hitEnemy(o, o===e?b.dmg:b.dmg*0.6, 'sonic');
+          hitEnemy(o, (o===e || b.awakeWide) ? b.dmg : b.dmg*0.6, 'sonic');
         }
       }
       break;
     }
     case 'shock':{
-      // 近くの敵へ電撃が連鎖(Lv5で3体)
+      // 近くの敵へ電撃が連鎖(Lv5で3体)。覚醒(雷撃コイル): 連鎖数+2、連鎖先を短くひるませる
       hitEnemy(e,b.dmg,'shock');
-      const chains=b.lv>=5?3:1;
+      const chains=(b.lv>=5?3:1) + (b.awakeChain?2:0);
       let src=e; const hitList=[e];
       for(let i=0;i<chains;i++){
         let best=null,bd=130;
@@ -2224,22 +2361,40 @@ function onProjectileHit(b,e){
         if(!best) break;
         fx.push({kind:'zap',x1:src.x,y1:src.y-60,x2:best.x,y2:best.y-60,life:8});
         hitEnemy(best,b.dmg*0.7,'shock');
+        if(b.awakeChain && best.alive) best.stunT=Math.max(best.stunT||0, Math.round(14*toughMul(best)));
         hitList.push(best); src=best;
       }
       break;
     }
     case 'freeze':
       hitEnemy(e,b.dmg,'freeze');
-      if(e.alive){ e.frozen=Math.round(90*toughMul(e)); if(b.lv>=5) e.freezeBonus=true; }
+      // 覚醒(絶対零度銃): 凍結時間延長+凍結中は誰の攻撃でもダメージ増加(1回消費ではなく持続)
+      if(e.alive){
+        e.frozen=Math.round((b.awakeDeep?150:90)*toughMul(e));
+        if(b.lv>=5 || b.awakeDeep) e.freezeBonus=true;
+        if(b.awakeDeep) e.freezeDeep=true;
+      }
       break;
-    case 'plasma':
-      // 着弾地点で範囲爆発(Lv5で範囲20%拡大)
-      explodeAt(b.x,e.y-50, b.lv>=5?84:70, b.dmg, 'plasma');
+    case 'plasma':{
+      // 着弾地点で範囲爆発(Lv5で範囲20%拡大)。覚醒(プラズマキャノン): 着弾地点が燃え続ける
+      const r=(b.lv>=5?84:70)*(1+(b.blastPct||0));
+      explodeAt(b.x,e.y-50, r, b.dmg, 'plasma');
+      if(b.awakeBurn){ fx.push({kind:'burnzone',x:b.x,y:e.y-50,r:r*0.7,life:150,dmg:Math.max(1,Math.round(b.dmg*0.12))}); }
       break;
-    case 'grenade':
-      explodeAt(b.x,e.y-50, b.mini?50:90, b.dmg, 'grenade');
+    }
+    case 'grenade':{
+      const r=(b.mini?50:90)*(1+(b.blastPct||0));
+      explodeAt(b.x,e.y-50, r, b.dmg, 'grenade');
       grenadeMini(b);
+      // 覚醒(クラスターランチャー): 爆発が破片弾を追加でまき散らす(レベル問わず)
+      if(b.awakeSplit && !b.mini && !b.isFrag){
+        for(let i=0;i<3;i++){
+          bullets.push({kind:'grenade',x:b.x+(Math.random()*60-30),y:e.y-90,
+            vx:(Math.random()-0.5)*4, vy:-3-Math.random()*2, dmg:b.dmg*0.22, lv:0, mini:true, isFrag:true, death:'grenade'});
+        }
+      }
       break;
+    }
     case 'sub_box':
       hitEnemy(e,b.dmg,'cardboard');
       if(e.alive){ e.stunT=Math.round(b.stun*toughMul(e)); e.boxed=e.stunT; }
@@ -2366,6 +2521,11 @@ function update(){
   bullets=bullets.filter(b=>{
     if(b.kind==='grenade' || b.kind==='poop'){ b.x+=b.vx; b.y+=b.vy; b.vy+=(b.kind==='poop'?0.12:0.32); }
     else { b.x+=b.vx; if(b.vy) b.y+=b.vy; }
+    // 覚醒(デザートイーグル)・追尾チップ: わずかに敵へ吸い寄せられる
+    if(b.homing){
+      const t=enemies.filter(o=>o.alive).sort((p,q)=>Math.hypot(b.x-p.x,(p.y-90)-b.y)-Math.hypot(b.x-q.x,(q.y-90)-b.y))[0];
+      if(t){ const ty=t.y-90*t.scale; b.vy += Math.sign(ty-b.y)*0.5; b.vy=Math.max(-6,Math.min(6,b.vy)); }
+    }
     if(b.life!==undefined && --b.life<=0) return false;
     for(const e of enemies){
       if(!e.alive) continue;
@@ -2381,6 +2541,14 @@ function update(){
           // ヨウムの模倣貫通: 1体目はそのまま通過して2体目まで届く
           onProjectileHit(b,e);
           continue;
+        }
+        // 貫通チップ(汎用): bullet種の弾に+1貫通を付与する
+        if(b.pierce>0){
+          b.hitList = b.hitList||[];
+          if(!b.hitList.includes(e)){
+            onProjectileHit(b,e); b.hitList.push(e);
+            if(b.hitList.length<=b.pierce) continue;
+          }
         }
         onProjectileHit(b,e); return false;
       }
@@ -2480,6 +2648,14 @@ function update(){
   }
   enemies=enemies.filter(e=>!e.remove && (e.alive || e.dying<(DEATH_DUR[e.deathKind]||45)));
 
+  // 燃焼ゾーン(覚醒プラズマキャノン): 範囲内の敵に継続ダメージ(15フレームごと)
+  for(const f of fx){
+    if(f.kind==='burnzone' && f.life%15===0){
+      for(const o of enemies){
+        if(o.alive && Math.abs(o.x-f.x)<f.r) hitEnemy(o, f.dmg, 'plasma');
+      }
+    }
+  }
   fx=fx.filter(f=>--f.life>0);
   parts=parts.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.18; return --p.life>0; });
   floats=floats.filter(f=>{ f.y-=0.8; return --f.life>0; });
@@ -2735,6 +2911,11 @@ function draw(){
       ctx.beginPath(); ctx.arc(f.x,my2,11,0,Math.PI*2); ctx.fill();
       ctx.strokeStyle='rgba(255,138,58,.5)'; ctx.lineWidth=4;
       ctx.beginPath(); ctx.moveTo(f.x+9,my2-16); ctx.lineTo(f.x+22,my2-42); ctx.stroke();
+    } else if(f.kind==='burnzone'){
+      ctx.globalAlpha=0.35+0.15*Math.sin(f.life/6);
+      ctx.fillStyle='#ff6a2a';
+      ctx.beginPath(); ctx.ellipse(f.x,f.y+30,f.r,f.r*0.35,0,0,Math.PI*2); ctx.fill();
+      if(f.life%10<3) parts.push({x:f.x+(Math.random()*f.r-f.r/2),y:f.y+20,vx:0,vy:-1.4,life:16,c:'#ff8a3a'});
     }
   }
   ctx.globalAlpha=1;
@@ -3261,7 +3442,7 @@ function endStage(win){
     sv.cleared[sv.curDiff][stageId] = { rank:bestRank, score:best, count:(rec?rec.count:0)+1, day, dayCount };
     if(stageId>=sv.unlocked[sv.curDiff] && stageId<30) sv.unlocked[sv.curDiff]=stageId+1;
     // 全30ステージクリアで次の難易度を解放する
-    if(stageId===30){
+    if(stageId===30 && first){
       sv.unlocked[sv.curDiff]=30;
       const idx=DIFFS.findIndex(d=>d.id===sv.curDiff);
       const next=DIFFS[idx+1];
@@ -3270,6 +3451,15 @@ function endStage(win){
         if(sv.unlocked[next.id]<1) sv.unlocked[next.id]=1;
         bonusRows.push(['🔓 新しい難易度解放!', next.name]);
       }
+      // NORMAL初回全クリアで武器覚醒システムが解放。HARD以上の初回全クリアでは覚醒コアを追加入手
+      if(sv.curDiff==='normal'){
+        bonusRows.push(['⚗️ 武器覚醒システム解放!','']);
+      } else {
+        sv.cores+=2;
+        bonusRows.push(['💎 覚醒コア','+2 (計'+sv.cores+')']);
+      }
+    } else if(stageId===30){
+      sv.unlocked[sv.curDiff]=30;
     }
   }
   // 小さな幸運(キンカチョウ): ステージ終了時の獲得コイン増加(上限+25%)
@@ -3388,7 +3578,7 @@ function refreshTitle(){
   document.getElementById('diffLabel').textContent=diffOf(sv.curDiff).name;
   const done=Object.keys(sv.cleared[sv.curDiff]||{}).length;
   document.getElementById('titleInfo').textContent=
-    diffOf(sv.curDiff).name+' クリア '+done+' / 30 ステージ ・ 装備: '+curMain().name+' Lv'+curLv();
+    diffOf(sv.curDiff).name+' クリア '+done+' / 30 ステージ ・ 装備: '+mainDisplayName(sv.eqMain)+' Lv'+curLv();
 }
 function renderStages(){
   const grid=document.getElementById('stageGrid');
@@ -3454,7 +3644,9 @@ const SHOP_CATS={
 };
 function renderShop(){
   document.getElementById('shopCoins').textContent='$'+sv.coins;
+  document.getElementById('shopCores').textContent='💎'+sv.cores;
   document.querySelectorAll('.shop-tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===shopTab));
+  if(shopTab==='awaken'){ renderAwakenShop(); return; }
   const C=SHOP_CATS[shopTab];
   const list=document.getElementById('shopList');
   list.innerHTML='';
@@ -3521,6 +3713,106 @@ function renderShop(){
     b.onclick=()=>{ C.eqSet(b.dataset.eq); save(); SFX.tap(); renderShop(); };
   });
 }
+/* ================= 覚醒タブ ================= */
+function renderAwakenShop(){
+  const list=document.getElementById('shopList');
+  list.innerHTML='';
+  const normalDone = !!sv.cleared.normal[30];
+  if(!normalDone){
+    const row=document.createElement('div');
+    row.className='shop-row locked';
+    row.innerHTML='<div class="shop-name">🔒 武器覚醒</div><div class="shop-meta">NORMALモードの全30ステージをクリアすると解放されます。</div>';
+    list.appendChild(row);
+    return;
+  }
+  // 所持チップの一覧+購入
+  const chipHead=document.createElement('div');
+  chipHead.className='shop-row';
+  chipHead.innerHTML='<div class="shop-name">覚醒チップ(購入すると全ての覚醒武器で使い回せます)</div>';
+  const chipGrid=document.createElement('div');
+  chipGrid.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;';
+  CHIPS.forEach(c=>{
+    const owned=sv.chipsOwned.includes(c.id);
+    const b=document.createElement('button');
+    b.className='shop-btn'+(owned?' eq':' buy');
+    b.style.fontSize='10px';
+    b.textContent = owned ? (c.name+' 所持済') : (c.name+' $'+c.cost.toLocaleString());
+    b.disabled = owned || sv.coins<c.cost;
+    b.title=c.desc;
+    b.onclick=()=>{
+      if(owned || sv.coins<c.cost) return;
+      sv.coins-=c.cost; sv.chipsOwned.push(c.id);
+      save(); SFX.clear(); renderAwakenShop();
+    };
+    chipGrid.appendChild(b);
+  });
+  chipHead.appendChild(chipGrid);
+  list.appendChild(chipHead);
+
+  MAINS.forEach(w=>{
+    const own = sv.main[w.id] && sv.main[w.id].own && sv.main[w.id].lv>=5;
+    const A=AWAKEN[w.id];
+    const a=sv.awaken[w.id];
+    const row=document.createElement('div');
+    row.className='shop-row'+(a&&a.on?' equipped':'');
+    const name=document.createElement('div');
+    name.className='shop-name';
+    name.innerHTML='<span>'+(a&&a.on?A.name:w.name)+'</span>'+(a&&a.on?'<span class="lv" style="color:'+A.color+';">覚醒済</span>':'');
+    row.appendChild(name);
+    const meta=document.createElement('div');
+    meta.className='shop-meta';
+    if(!own){
+      meta.textContent='🔒 '+w.name+'をLv5にすると覚醒できます';
+    } else if(!a || !a.on){
+      meta.innerHTML='固有能力: '+A.desc+'<br>得意: '+A.good+' ・ 苦手: '+A.bad+'<br>費用 $'+A.cost.toLocaleString()+' + 覚醒コア×'+A.cores;
+    } else {
+      meta.innerHTML=A.desc+'<br>得意: '+A.good+' ・ 苦手: '+A.bad+'<br>基礎威力+20%(継続レベルアップなし)';
+    }
+    row.appendChild(meta);
+    const btns=document.createElement('div');
+    btns.className='shop-btns';
+    if(own && (!a || !a.on)){
+      const canAwake = sv.coins>=A.cost && sv.cores>=A.cores;
+      const btn=document.createElement('button');
+      btn.className='shop-btn buy';
+      btn.textContent='覚醒させる';
+      btn.disabled=!canAwake;
+      btn.onclick=()=>{
+        if(sv.coins<A.cost || sv.cores<A.cores) return;
+        sv.coins-=A.cost; sv.cores-=A.cores;
+        sv.awaken[w.id]={on:true, chips:[]};
+        save(); SFX.levelup(); renderAwakenShop();
+      };
+      btns.appendChild(btn);
+    } else if(own && a && a.on){
+      // チップ装着スロット(最大2)
+      for(let slot=0; slot<2; slot++){
+        const sel=document.createElement('select');
+        sel.style.cssText='background:#233650;color:#dbe6f5;border:1px solid #3d5270;border-radius:8px;padding:6px;font-size:11px;';
+        const optNone=document.createElement('option'); optNone.value=''; optNone.textContent='(なし)';
+        sel.appendChild(optNone);
+        sv.chipsOwned.forEach(cid=>{
+          const c=chipOf(cid);
+          const opt=document.createElement('option');
+          opt.value=cid; opt.textContent=c.name;
+          if(a.chips[slot]===cid) opt.selected=true;
+          sel.appendChild(opt);
+        });
+        if(!a.chips[slot]) optNone.selected=true;
+        sel.onchange=()=>{
+          const other=a.chips[1-slot];
+          if(sel.value && sel.value===other){ showToast('同じチップを2つは装着できません'); sel.value=a.chips[slot]||''; return; }
+          a.chips[slot]=sel.value||null;
+          a.chips=a.chips.filter(Boolean);
+          save(); renderAwakenShop();
+        };
+        btns.appendChild(sel);
+      }
+    }
+    row.appendChild(btns);
+    list.appendChild(row);
+  });
+}
 document.querySelectorAll('.shop-tab').forEach(b=>{
   b.onclick=()=>{ shopTab=b.dataset.tab; SFX.tap(); renderShop(); };
 });
@@ -3580,12 +3872,14 @@ function renderWeaponSelect(list){
   box.innerHTML='';
   list.forEach(w=>{
     const lv=sv.main[w.id].lv;
+    const awake=isAwakened(w.id);
+    const dmg = awake ? Math.round(w.dmg[lv-1]*1.2) : w.dmg[lv-1];
     const row=document.createElement('div');
     row.className='shop-row'+(sv.eqMain===w.id?' equipped':'');
     row.style.cursor='pointer';
-    row.innerHTML='<div class="shop-name"><span>'+w.name+'</span><span class="lv">Lv'+lv
+    row.innerHTML='<div class="shop-name"><span>'+(awake?AWAKEN[w.id].name:w.name)+'</span><span class="lv">Lv'+lv
       +(sv.eqMain===w.id?' ・装備中':'')+'</span></div>'
-      +'<div class="shop-meta">威力 '+w.dmg[lv-1]+' / 連射 '+w.rate[lv-1]+'発/秒</div>';
+      +'<div class="shop-meta">威力 '+dmg+' / 連射 '+w.rate[lv-1]+'発/秒'+(awake?' ・ 覚醒済':'')+'</div>';
     row.onclick=()=>{
       sv.eqMain=w.id; save(); gatlingRamp=0; fireCd=0;
       SFX.weaponSwitch();
