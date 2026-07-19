@@ -2422,7 +2422,7 @@ function playerSkinFx(bx,by){
       for(let i=0;i<3;i++) parts.push({x:bx,y:by,vx:2+Math.random()*3,vy:(Math.random()-0.5)*3,life:10,c:skin.fxC});
       break;
     case 'smokeTrail':
-      parts.push({x:bx-10,y:by+4,vx:-0.5,vy:-0.6,life:16,c:skin.fxC});
+      parts.push({x:bx-10,y:by+4,vx:-0.5,vy:-0.6,life:16,c:skin.fxC,rise:true});
       break;
     case 'sakura':
       if(Math.random()<0.6) parts.push({x:bx+Math.random()*20,y:by-20-Math.random()*20,vx:-0.3,vy:0.8,life:26,c:skin.fxC});
@@ -2431,7 +2431,7 @@ function playerSkinFx(bx,by){
       parts.push({x:bx-4,y:by+6,vx:-0.8,vy:0.3,life:12,c:skin.fxC});
       break;
     case 'devilSmoke':
-      parts.push({x:bx,y:by,vx:-0.6,vy:-0.8,life:18,c:'#2a1a1a'});
+      parts.push({x:bx,y:by,vx:-0.6,vy:-0.8,life:18,c:'#2a1a1a',rise:true});
       if(Math.random()<0.5) parts.push({x:bx,y:by,vx:1.5,vy:-1,life:9,c:skin.fxC});
       break;
   }
@@ -2745,9 +2745,13 @@ function update(){
   if(victoryT>0){
     victoryT--;
     updateBirds();
-    if(victoryT%18===0) parts.push({x:20+Math.random()*70,y:GROUND-95-Math.random()*10,vx:0.1,vy:-0.5,life:40,c:'#c9c9c9'});   // 煙突の煙
+    if(victoryT%18===0) parts.push({x:20+Math.random()*70,y:GROUND-95-Math.random()*10,vx:0.1,vy:-0.5,life:40,c:'#c9c9c9',rise:true});   // 煙突の煙
     fx=fx.filter(f=>--f.life>0);
-    parts=parts.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.02; return --p.life>0; });
+    parts=parts.filter(p=>{
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.rise){ p.vy*=0.985; p.vx*=0.99; } else p.vy+=0.02;
+      return --p.life>0;
+    });
     if(victoryT<=0) endStage(true);
     return;
   }
@@ -2950,7 +2954,12 @@ function update(){
     }
   }
   fx=fx.filter(f=>--f.life>0);
-  parts=parts.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.18; return --p.life>0; });
+  parts=parts.filter(p=>{
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.rise){ p.vy*=0.985; p.vx*=0.99; }   // 煙: 重力をかけず、ふわっと減速しながら漂う
+    else p.vy+=0.18;                          // 通常の粒子(破片・爆発など)は重力で落ちる
+    return --p.life>0;
+  });
   floats=floats.filter(f=>{ f.y-=0.8; return --f.life>0; });
 
   // 終了判定
@@ -3020,7 +3029,7 @@ function drawHouseScene(g){
 
   // 煙突の煙(常時ゆらゆら。控えめな頻度)
   if(running && !paused && Math.random()<0.02){
-    parts.push({x:bx+42+Math.random()*4,y:gy-100,vx:0.05+Math.random()*0.1,vy:-0.35,life:55,c:'#cfd6de'});
+    parts.push({x:bx+42+Math.random()*4,y:gy-100,vx:0.05+Math.random()*0.1,vy:-0.35,life:55,c:'#cfd6de',rise:true});
   }
 }
 function draw(){
@@ -3271,7 +3280,7 @@ function draw(){
       ctx.globalAlpha=0.35+0.15*Math.sin(f.life/6);
       ctx.fillStyle='#ff6a2a';
       ctx.beginPath(); ctx.ellipse(f.x,f.y+30,f.r,f.r*0.35,0,0,Math.PI*2); ctx.fill();
-      if(f.life%10<3) parts.push({x:f.x+(Math.random()*f.r-f.r/2),y:f.y+20,vx:0,vy:-1.4,life:16,c:'#ff8a3a'});
+      if(f.life%10<3) parts.push({x:f.x+(Math.random()*f.r-f.r/2),y:f.y+20,vx:0,vy:-1.4,life:16,c:'#ff8a3a',rise:true});
     }
   }
   ctx.globalAlpha=1;
@@ -3541,7 +3550,7 @@ function drawDeadEnemy(e){
       ctx.globalAlpha=Math.max(0,1-p);
       ctx.fillStyle='rgba(160,220,255,.5)';
       ctx.beginPath(); ctx.arc(e.x,e.y-55*e.scale,45*e.scale*(0.6+p*0.6),0,Math.PI*2); ctx.fill();
-      if(t%2===0) parts.push({x:e.x+(Math.random()*40-20),y:e.y-Math.random()*90,vx:0,vy:-2,life:18,c:'#8fd2ff'});
+      if(t%2===0) parts.push({x:e.x+(Math.random()*40-20),y:e.y-Math.random()*90,vx:0,vy:-2,life:18,c:'#8fd2ff',rise:true});
       break;
     }
     case 'gatling':{
@@ -3689,7 +3698,7 @@ function drawDeadEnemy(e){
         ctx.globalAlpha=Math.min(1,t/12);
         ctx.fillStyle='#1a1a1a';
         ctx.beginPath(); ctx.ellipse(e.x,e.y-52*e.scale,22*e.scale,52*e.scale,0,0,Math.PI*2); ctx.fill();
-        if(t%3===0) parts.push({x:e.x+(Math.random()*20-10),y:e.y-100*e.scale,vx:0.3,vy:-1.5,life:24,c:'#777'});
+        if(t%3===0) parts.push({x:e.x+(Math.random()*20-10),y:e.y-100*e.scale,vx:0.3,vy:-1.5,life:24,c:'#777',rise:true});
       } else {
         // 灰の山
         ctx.globalAlpha=1-(t-44)/(D-44);
