@@ -1101,7 +1101,10 @@ function load(){
     DIFFS.forEach((d,i)=>{
       if(i===0) return;
       const prev=DIFFS[i-1].id;
-      if(s.unlocked[prev]>=30 && !s.diffUnlocked.includes(d.id)) s.diffUnlocked.push(d.id);
+      if(s.unlocked[prev]>=30){
+        if(!s.diffUnlocked.includes(d.id)) s.diffUnlocked.push(d.id);
+        if(s.unlocked[d.id]<1) s.unlocked[d.id]=1;   // 選択はできるがステージが全部ロックされたままになるのを防ぐ
+      }
     });
     if(!DIFFS.some(d=>d.id===s.curDiff) || !s.diffUnlocked.includes(s.curDiff)) s.curDiff='normal';
     // 鳥データの検証: すべての鳥は最初から選択可能
@@ -3045,7 +3048,9 @@ function draw(){
   ctx.fillStyle='#3a2c1c';
   for(let i=0;i<26;i++) ctx.fillRect((i*67)%W, GROUND+12+(i%3)*14, 16, 4);
 
-  // 防衛ライン(=家の敷地の境界)
+  drawHouseScene(ctx);
+
+  // 防衛ライン(=家の敷地の境界)。家より後に描いて、ラベル文字が木や屋根に隠れないようにする
   ctx.fillStyle='rgba(91,227,107,.14)'; ctx.fillRect(0,0,DEF_X,GROUND);
   ctx.strokeStyle='#5be36b'; ctx.lineWidth=3; ctx.setLineDash([9,7]);
   ctx.beginPath(); ctx.moveTo(DEF_X,0); ctx.lineTo(DEF_X,GROUND); ctx.stroke();
@@ -3054,7 +3059,6 @@ function draw(){
   ctx.save(); ctx.translate(DEF_X-13,GROUND/2); ctx.rotate(-Math.PI/2);
   ctx.fillText('家の敷地',0,0); ctx.restore();
 
-  drawHouseScene(ctx);
   drawPlayerArt(ctx,PLAYER_X,GROUND,charCfg.hero,HERO_SCALE,curPlayerSkin());
   drawBirds();
 
