@@ -388,6 +388,10 @@
     </div>
   </div>
   <div class="set-block">
+    <div class="set-label">画面表示</div>
+    <button class="btn sub" id="settingsFullBtn" style="font-size:13px;">全画面にする</button>
+  </div>
+  <div class="set-block">
     <div class="set-label">セーブデータ</div>
     <button class="btn sub" id="resetSave" style="background:#5c2430;box-shadow:0 4px 0 #3a1620;">データを初期化する</button>
     <p class="hint" style="font-size:11px;">コイン・武器・ステージの進行がすべて消えます。</p>
@@ -972,6 +976,15 @@ function load(){
     if(!s.unlocked || typeof s.unlocked!=='object') s.unlocked={normal:1,hard:0,expert:0,nightmare:0,hell:0};
     DIFFS.forEach(d=>{ if(typeof s.unlocked[d.id]!=='number') s.unlocked[d.id]=(d.id==='normal'?1:0); });
     if(s.unlocked.normal<1) s.unlocked.normal=1;
+    // clearedの実績からunlockedを自己修復する(過去のバグ等でunlockedだけ壊れても、
+    // クリア記録が残っていれば正しいステージ数まで自動的に復元する)
+    DIFFS.forEach(d=>{
+      const ids=Object.keys(s.cleared[d.id]).map(Number).filter(n=>n>=1&&n<=30);
+      if(!ids.length) return;
+      const maxCleared=Math.max(...ids);
+      const shouldUnlock=Math.min(30, maxCleared+ (maxCleared<30?1:0));
+      if(s.unlocked[d.id]<shouldUnlock) s.unlocked[d.id]=shouldUnlock;
+    });
     if(!Array.isArray(s.diffUnlocked) || !s.diffUnlocked.includes('normal')) s.diffUnlocked=['normal'];
     s.diffUnlocked=s.diffUnlocked.filter(id=>DIFFS.some(d=>d.id===id));
     // 実際にクリア済みステージ数からも解放状況を再計算する(セーブ改変・破損対策)
@@ -1007,8 +1020,6 @@ function load(){
         if(!s.birdParty.length) s.birdParty='random';
       }
     }
-    if(typeof s.unlocked!=='number' || s.unlocked<1 || s.unlocked>30) s.unlocked=1;
-    if(!s.cleared || typeof s.cleared!=='object') s.cleared={};
     return s;
   }catch(e){
     console.warn('セーブデータを読めなかったため初期化しました', e);
@@ -1560,12 +1571,9 @@ function startStage(id){
   requestAnimationFrame(loop);
 }
 function showPads(on){
-  ['btnMain','btnSwap','btnSub','btnUlt','btnPause'].forEach(id=>{
+  ['btnMain','btnSwap','btnSub','btnUlt','btnPause','btnFull','btnMute'].forEach(id=>{
     document.getElementById(id).style.display = on?'flex':'none';
   });
-  // 全画面・ミュートは常に表示
-  document.getElementById('btnFull').style.display='flex';
-  document.getElementById('btnMute').style.display='flex';
 }
 function spawnEnemy(type){
   const T=ENEMY_TYPES[type];
@@ -3848,6 +3856,7 @@ function toggleFullscreen(){
   }
 }
 document.getElementById('btnFull').onclick=toggleFullscreen;
+document.getElementById('settingsFullBtn').onclick=toggleFullscreen;
 document.getElementById('fsHelpClose').onclick=()=>document.getElementById('ovFsHelp').classList.remove('show');
 document.addEventListener('fullscreenchange', ()=>{ fitCanvas(); setTimeout(fitCanvas,120); });
 document.addEventListener('webkitfullscreenchange', ()=>{ fitCanvas(); setTimeout(fitCanvas,120); });
