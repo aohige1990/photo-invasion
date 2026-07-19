@@ -237,7 +237,6 @@
   <button class="btn" id="goStages">ステージ選択</button>
   <button class="btn sub" id="goShop">ショップ</button>
   <button class="btn sub" id="goBirds">仲間を選ぶ</button>
-  <button class="btn sub" id="goBirdDex">鳥図鑑</button>
   <button class="btn sub" id="goPhoto">写真設定</button>
   <button class="btn sub" id="goBackup">データのバックアップ</button>
   <button class="btn sub" id="goSettings">設定</button>
@@ -353,14 +352,6 @@
   <button class="btn" id="birdsBack">タイトルへ</button>
 </div>
 
-<!-- 鳥図鑑(BirdDex) -->
-<div class="screen" id="scrBirdDex" style="justify-content:flex-start;padding-top:2vh;">
-  <h1 style="font-size:clamp(17px,4.5vw,24px);">鳥図鑑</h1>
-  <p class="hint" id="dexCount" style="margin:0;"></p>
-  <div id="birdDexGrid" class="bird-grid"></div>
-  <button class="btn" id="birdDexBack">タイトルへ</button>
-</div>
-
 <!-- データのバックアップ -->
 <div class="screen" id="scrBackup" style="justify-content:flex-start;padding-top:2vh;">
   <h1 style="font-size:clamp(17px,4.5vw,24px);">データのバックアップ</h1>
@@ -443,8 +434,13 @@
 <!-- 武器選択(武器切替ボタンで一時停止して表示) -->
 <div class="overlay" id="ovWeaponSelect">
   <div class="card" style="max-width:min(440px,92vw);">
-    <h2>メイン武器を選択</h2>
-    <div id="weaponSelectList" style="display:flex;flex-direction:column;gap:8px;width:100%;max-height:55vh;overflow-y:auto;"></div>
+    <h2>武器を選択</h2>
+    <div class="shop-tabs" style="margin-bottom:4px;">
+      <button class="shop-tab on" data-wtab="main">メイン</button>
+      <button class="shop-tab" data-wtab="sub">サブ</button>
+      <button class="shop-tab" data-wtab="ult">必殺技</button>
+    </div>
+    <div id="weaponSelectList" style="display:flex;flex-direction:column;gap:8px;width:100%;max-height:50vh;overflow-y:auto;"></div>
     <button class="btn sub" id="weaponSelectCancel">閉じる(選ばない)</button>
   </div>
 </div>
@@ -1194,14 +1190,25 @@ function pickTitleBirds(){
    ボタン列は中央に幅を絞って配置してあるので、家は左余白・木(止まり木付き)は右余白に置く。 */
 function gardenLayout(TW,TH){
   const groundY=TH*0.835;
-  const houseX=TW*0.015, houseW=Math.min(TW*0.15,62), houseTopY=groundY-TH*0.14;
+  const btnW=Math.min(TW*0.64,250), margin=(TW-btnW)/2;
+  // 家・主人公のサイズは「鳥のサイズ」を基準に計算する(文鳥=標準的な小鳥サイズを基準値とする)
+  const refSize=(birdOf('bunchou')||{size:23}).size;   // 基準となる鳥のサイズ(px)
+  const houseWTarget=refSize*3.9;          // 家の横幅 ≈ 基準の鳥の3.9倍
+  const wallHTarget=refSize*4.3;           // 家の壁の高さ ≈ 基準の鳥の4.3倍
+  const playerHTarget=refSize*3.0;         // 主人公の身長 ≈ 基準の鳥の3.0倍(壁より少し低く、ドアを通れる)
+  // 極端に狭い画面でもボタン列の余白からはみ出さないよう、上限で保険をかける
+  const houseW=Math.min(houseWTarget, margin*0.85);
+  const wallH=Math.min(wallHTarget, margin*1.5);
+  const houseX=TW*0.02, houseTopY=groundY-wallH;
   const roofPeakY=houseTopY-houseW*0.42;
+  const playerScale=Math.min(playerHTarget, wallH*0.68)/82;   // 82=drawPlayerArtの内部ジオメトリ高さ(scale=1時)
   const treeX=TW*0.90, treeTopY=groundY-TH*0.34;
   const perchY=groundY-TH*0.185;
   const pondX=houseX+houseW*1.28, pondY=groundY;
   const feedX=houseX+houseW*0.55, feedY=groundY;
   return {
     groundY, houseX, houseW, houseTopY, roofPeakY, treeX, treeTopY, pondX, pondY, feedX, feedY,
+    playerScale, refSize,
     doorX:houseX+houseW*0.16, doorY:groundY,
     roofPerch:{x:houseX+houseW*0.5, y:houseTopY-2, kind:'roof'},
     treePerch:{x:treeX-14, y:perchY, kind:'perch'},
@@ -1408,7 +1415,7 @@ function drawTitleGarden(){
 
   // 主人公(餌やり演出の間だけ表示)
   if(feedEvent){
-    drawPlayerArt(g, feedEvent.x, feedEvent.y, {mode:'face',faceImg:null}, TW*0.00095*38, curPlayerSkin());
+    drawPlayerArt(g, feedEvent.x, feedEvent.y, {mode:'face',faceImg:null}, L.playerScale, curPlayerSkin());
   }
 
   // 鳥(地面・屋根・止まり木のいずれかで休む/飛ぶ/池で水を飲む/餌をついばむ)
@@ -4705,46 +4712,100 @@ document.addEventListener('webkitfullscreenchange', ()=>{ fitCanvas(); setTimeou
 function refreshMute(){ document.getElementById('btnMute').textContent = sv.muted?'🔇':'🔊'; }
 document.getElementById('btnMute').onclick=()=>{ sv.muted=!sv.muted; save(); refreshMute(); if(!sv.muted) SFX.tap(); };
 
-/* ① 武器切替: 一時停止して所持武器の一覧から選ぶ */
+/* ① 武器切替: 一時停止してメイン/サブ/必殺技のいずれかを選び直す */
 function ownedMains(){ return MAINS.filter(w=>sv.main[w.id] && sv.main[w.id].own); }
+function ownedSubs(){ return SUBS.filter(w=>sv.sub[w.id] && sv.sub[w.id].own); }
+function ownedUlts(){ return ULTS.filter(w=>sv.ult[w.id] && sv.ult[w.id].own); }
+let weaponSwapTab='main';
 document.getElementById('btnSwap').onclick=()=>{
   if(!running) return;
-  const list=ownedMains();
-  if(list.length<=1){ addFloat(PLAYER_X,GROUND-120,'他の武器がありません','#8fa5c4'); return; }
+  const totalOwned = ownedMains().length + ownedSubs().length + ownedUlts().length;
+  if(totalOwned<=3){ addFloat(PLAYER_X,GROUND-120,'他の武器がありません','#8fa5c4'); return; }
   paused=true; fireHeld=false;
-  renderWeaponSelect(list);
+  weaponSwapTab='main';
+  document.querySelectorAll('#ovWeaponSelect [data-wtab]').forEach(b=>b.classList.toggle('on',b.dataset.wtab==='main'));
+  renderWeaponSelect();
   document.getElementById('ovWeaponSelect').classList.add('show');
   SFX.tap();
 };
-function renderWeaponSelect(list){
+document.querySelectorAll('#ovWeaponSelect [data-wtab]').forEach(b=>{
+  b.onclick=()=>{
+    weaponSwapTab=b.dataset.wtab;
+    document.querySelectorAll('#ovWeaponSelect [data-wtab]').forEach(x=>x.classList.toggle('on',x===b));
+    SFX.tap(); renderWeaponSelect();
+  };
+});
+function renderWeaponSelect(){
   const box=document.getElementById('weaponSelectList');
   box.innerHTML='';
-  list.forEach(w=>{
-    const lv=sv.main[w.id].lv;
-    const awake=isAwakened(w.id);
-    const dmg = awake ? Math.round(w.dmg[lv-1]*1.2) : w.dmg[lv-1];
-    const row=document.createElement('div');
-    row.className='shop-row'+(sv.eqMain===w.id?' equipped':'');
-    row.style.cursor='pointer';
-    row.innerHTML='<div class="shop-name"><span>'+(awake?AWAKEN[w.id].name:w.name)+'</span><span class="lv">Lv'+lv
-      +(sv.eqMain===w.id?' ・装備中':'')+'</span></div>'
-      +'<div class="shop-meta">威力 '+dmg+' / 連射 '+w.rate[lv-1]+'発/秒'+(awake?' ・ 覚醒済':'')+'</div>';
-    row.onclick=()=>{
-      sv.eqMain=w.id; save(); gatlingRamp=0; fireCd=0;
-      SFX.weaponSwitch();
-      document.getElementById('ovWeaponSelect').classList.remove('show');
-      paused=false;
-      refreshHud();
-    };
-    box.appendChild(row);
-  });
+  if(weaponSwapTab==='main'){
+    ownedMains().forEach(w=>{
+      const lv=sv.main[w.id].lv, awake=isAwakened(w.id);
+      const dmg = awake ? Math.round(w.dmg[lv-1]*1.2) : w.dmg[lv-1];
+      const row=document.createElement('div');
+      row.className='shop-row'+(sv.eqMain===w.id?' equipped':'');
+      row.style.cursor='pointer';
+      row.innerHTML='<div class="shop-name"><span>'+(awake?AWAKEN[w.id].name:w.name)+'</span><span class="lv">Lv'+lv
+        +(sv.eqMain===w.id?' ・装備中':'')+'</span></div>'
+        +'<div class="shop-meta">威力 '+dmg+' / 連射 '+w.rate[lv-1]+'発/秒'+(awake?' ・ 覚醒済':'')+'</div>';
+      row.onclick=()=>{
+        sv.eqMain=w.id; save(); gatlingRamp=0; fireCd=0;
+        SFX.weaponSwitch();
+        document.getElementById('ovWeaponSelect').classList.remove('show');
+        paused=false; refreshHud();
+      };
+      box.appendChild(row);
+    });
+  } else if(weaponSwapTab==='sub'){
+    ownedSubs().forEach(w=>{
+      const lv=sv.sub[w.id].lv;
+      const row=document.createElement('div');
+      row.className='shop-row'+(sv.eqSub===w.id?' equipped':'');
+      row.style.cursor='pointer';
+      const meta = w.reflect
+        ? '反射 '+Math.round(w.reflect[lv-1]*100)+'% / 待ち '+w.cd[lv-1]+'秒'
+        : '威力 '+w.dmg[lv-1]+(w.hits?'×'+w.hits:'')+' / 待ち '+w.cd[lv-1]+'秒';
+      row.innerHTML='<div class="shop-name"><span>'+w.name+'</span><span class="lv">Lv'+lv
+        +(sv.eqSub===w.id?' ・装備中':'')+'</span></div>'
+        +'<div class="shop-meta">'+meta+'<br><span style="color:#a06bc9;">'+w.ability+'</span></div>';
+      row.onclick=()=>{
+        sv.eqSub=w.id; save(); subCd=0;
+        SFX.weaponSwitch();
+        document.getElementById('ovWeaponSelect').classList.remove('show');
+        paused=false; refreshHud();
+      };
+      box.appendChild(row);
+    });
+  } else {
+    ownedUlts().forEach(w=>{
+      const lv=sv.ult[w.id].lv;
+      const row=document.createElement('div');
+      row.className='shop-row'+(sv.eqUlt===w.id?' equipped':'');
+      row.style.cursor='pointer';
+      row.innerHTML='<div class="shop-name"><span>'+w.name+'</span><span class="lv">Lv'+lv
+        +(sv.eqUlt===w.id?' ・装備中':'')+'</span></div>'
+        +'<div class="shop-meta">威力 '+w.dmg[lv-1]+' / 必要ゲージ '+w.gauge[lv-1]+'<br><span style="color:#5be36b;">'+w.ability+'</span></div>';
+      row.onclick=()=>{
+        sv.eqUlt=w.id; save();
+        SFX.weaponSwitch();
+        document.getElementById('ovWeaponSelect').classList.remove('show');
+        paused=false; refreshHud();
+      };
+      box.appendChild(row);
+    });
+  }
+  if(!box.children.length){
+    const p=document.createElement('p'); p.className='hint';
+    p.textContent='このカテゴリで他に持っている武器がありません。';
+    box.appendChild(p);
+  }
 }
 document.getElementById('weaponSelectCancel').onclick=()=>{
   document.getElementById('ovWeaponSelect').classList.remove('show');
   paused=false; SFX.tap();
 };
 
-/* ================= 仲間を選ぶ / 鳥図鑑 ================= */
+/* ================= 仲間を選ぶ ================= */
 function birdCardCanvas(bird, big){
   const c=document.createElement('canvas');
   c.width=big?96:84; c.height=big?72:60;
@@ -4759,29 +4820,47 @@ function renderBirdSelect(){
   const isRandom = sv.birdParty==='random';
   document.getElementById('birdRandomBtn').style.background = isRandom ? 'var(--green)' : '#3d5270';
   document.getElementById('birdRandomBtn').style.color = isRandom ? '#08240f' : '#dbe6f5';
-  // 全16種すべて選択可能
+  // 全16種すべて選択可能。鳥図鑑の情報(説明・育成状況・固有能力・記録)もここに統合表示する。
   BIRDS.forEach(b=>{
     const sel = !isRandom && Array.isArray(sv.birdParty) && sv.birdParty.includes(b.id);
+    const bd=sv.birdData[b.id];
     const d=document.createElement('div');
     d.className='bird-card'+(sel?' sel':'');
     // canvasを追加した後にinnerHTMLで文字を足すと、canvasの描画内容が消えてしまうため
     // (innerHTMLへの追記はDOMを丸ごと再構築し、canvasのピクセルは保存されない)、
     // ここから先はすべて createElement で個別に組み立てる。
-    d.appendChild(birdCardCanvas(b));
+    d.appendChild(birdCardCanvas(b,true));
     const nameDiv=document.createElement('div');
     nameDiv.className='bname';
     nameDiv.textContent=b.name+(sel?' ✓':'');
     d.appendChild(nameDiv);
     const clsDiv=document.createElement('div');
     clsDiv.className='bcls';
-    const bd=sv.birdData[b.id];
-    clsDiv.textContent=b.cls+' ・ Lv'+bd.lv;
+    clsDiv.style.color= bd.lv>=10 ? '#ffd94a' : '#5be36b';
+    clsDiv.textContent=b.cls+' ・ Lv'+bd.lv+(bd.lv>=10?'(最大)':'');
     d.appendChild(clsDiv);
-    const abDiv=document.createElement('div');
-    abDiv.className='bdesc';
-    abDiv.style.color='#c9a0e8';
-    abDiv.textContent=BIRD_ABILITIES[b.id]?BIRD_ABILITIES[b.id].name:'';
-    d.appendChild(abDiv);
+    if(bd.lv<10){
+      const xpDiv=document.createElement('div');
+      xpDiv.className='bcls';
+      xpDiv.textContent='次まで '+(BIRD_XP_NEED[bd.lv-1]-bd.xp)+' XP';
+      d.appendChild(xpDiv);
+    }
+    const descDiv=document.createElement('div');
+    descDiv.className='bdesc';
+    descDiv.textContent=b.desc;
+    d.appendChild(descDiv);
+    const ab=BIRD_ABILITIES[b.id];
+    if(ab){
+      const abDiv=document.createElement('div');
+      abDiv.className='bdesc';
+      abDiv.style.color='#c9a0e8';
+      abDiv.textContent='【'+ab.name+'】'+ab.desc;
+      d.appendChild(abDiv);
+    }
+    const recDiv=document.createElement('div');
+    recDiv.className='bcls';
+    recDiv.textContent='出撃'+bd.sorties+'回 / 撃破'+bd.kills;
+    d.appendChild(recDiv);
     d.onclick=()=>{
       let party = Array.isArray(sv.birdParty)?sv.birdParty.slice():[];
       if(party.includes(b.id)) party=party.filter(x=>x!==b.id);
@@ -4800,60 +4879,6 @@ document.getElementById('birdRandomBtn').onclick=()=>{
 };
 document.getElementById('goBirds').onclick=()=>{ SFX.tap(); showScreen('scrBirds'); renderBirdSelect(); };
 document.getElementById('birdsBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
-
-function renderBirdDex(){
-  const grid=document.getElementById('birdDexGrid');
-  grid.innerHTML='';
-  document.getElementById('dexCount').textContent=BIRDS.length+'種、すべて選択できます。';
-  BIRDS.forEach(b=>{
-    const d=document.createElement('div');
-    d.className='bird-card';
-    d.style.cursor='pointer';
-    d.onclick=()=>playBirdCall(b.id, W/2);
-    // ここも同様に innerHTML+= を使わず、要素を個別に作成して追加する
-    d.appendChild(birdCardCanvas(b,true));
-    const nameDiv=document.createElement('div');
-    nameDiv.className='bname';
-    nameDiv.textContent=b.name;
-    d.appendChild(nameDiv);
-    const clsDiv=document.createElement('div');
-    clsDiv.className='bcls';
-    clsDiv.textContent=b.cls;
-    d.appendChild(clsDiv);
-    const descDiv=document.createElement('div');
-    descDiv.className='bdesc';
-    descDiv.textContent=b.desc;
-    d.appendChild(descDiv);
-    // 育成情報
-    const bd=sv.birdData[b.id];
-    const lvDiv=document.createElement('div');
-    lvDiv.className='bname';
-    lvDiv.style.color= bd.lv>=10 ? '#ffd94a' : '#5be36b';
-    lvDiv.textContent='Lv'+bd.lv+(bd.lv>=10?' (最大)':'');
-    d.appendChild(lvDiv);
-    if(bd.lv<10){
-      const xpDiv=document.createElement('div');
-      xpDiv.className='bcls';
-      xpDiv.textContent='次まで '+(BIRD_XP_NEED[bd.lv-1]-bd.xp)+' XP';
-      d.appendChild(xpDiv);
-    }
-    const ab=BIRD_ABILITIES[b.id];
-    if(ab){
-      const abDiv=document.createElement('div');
-      abDiv.className='bdesc';
-      abDiv.style.color='#c9a0e8';
-      abDiv.textContent='【'+ab.name+'】'+ab.desc;
-      d.appendChild(abDiv);
-    }
-    const recDiv=document.createElement('div');
-    recDiv.className='bcls';
-    recDiv.textContent='出撃'+bd.sorties+'回 / 撃破'+bd.kills;
-    d.appendChild(recDiv);
-    grid.appendChild(d);
-  });
-}
-document.getElementById('goBirdDex').onclick=()=>{ SFX.tap(); showScreen('scrBirdDex'); renderBirdDex(); };
-document.getElementById('birdDexBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
 
 /* ================= データのバックアップ =================
    v2と同じ「PI1-」+ base64 形式。写真は含まれない。 */
