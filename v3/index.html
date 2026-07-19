@@ -223,6 +223,7 @@
 <div class="screen show" id="scrTitle">
   <h1>PHOTO INVASION 30</h1>
   <div class="coin-badge" id="titleCoins">$0</div>
+  <button class="btn sub" id="goDiff">難易度: <span id="diffLabel">NORMAL</span></button>
   <button class="btn" id="goStages">ステージ選択</button>
   <button class="btn sub" id="goShop">ショップ</button>
   <button class="btn sub" id="goBirds">仲間を選ぶ</button>
@@ -240,6 +241,14 @@
   <div class="coin-badge" id="stageCoins">$0</div>
   <div id="stageGrid"></div>
   <button class="btn sub" id="stagesBack">タイトルへ</button>
+</div>
+
+<!-- 難易度選択 -->
+<div class="screen" id="scrDiff" style="justify-content:flex-start;padding-top:2vh;">
+  <h1 style="font-size:clamp(17px,4.5vw,24px);">難易度選択</h1>
+  <p class="hint" style="max-width:600px;">高難易度は敵のHP・速度・出現数を単純に上げるだけでなく、ステージごとに強化される点が変わります。特殊な敵も出現します。</p>
+  <div id="diffList" style="display:flex;flex-direction:column;gap:8px;width:min(560px,94vw);flex:1;overflow-y:auto;padding:4px;"></div>
+  <button class="btn" id="diffBack">タイトルへ</button>
 </div>
 
 <!-- ショップ(メイン武器) -->
@@ -757,6 +766,64 @@ const DEATH_DUR={
 
 /* ================= 保存 ================= */
 const SAVE_KEY='photoInvasion30';
+
+/* ================= 高難易度モード =================
+   単純な数値の暴力にしないため、難易度全体の倍率は「予算」として持ち、
+   ステージ番号を4パターン(HP寄り/速度寄り/物量寄り/特殊敵寄り)で巡回させて
+   予算の配分先を変える。どのステージでも絶対上限(HP2倍・速度1.2倍・物量1.35倍)は超えない。 */
+const DIFFS=[
+  { id:'normal',    name:'NORMAL',    hpMul:1.00, spdMul:1.00, countMul:1.00, coinMul:1, specialRate:0,    bossExtra:0, bossPhase2:false },
+  { id:'hard',      name:'HARD',      hpMul:1.20, spdMul:1.05, countMul:1.10, coinMul:1.5, specialRate:0.08, bossExtra:0, bossPhase2:false },
+  { id:'expert',    name:'EXPERT',    hpMul:1.40, spdMul:1.10, countMul:1.15, coinMul:2, specialRate:0.14, bossExtra:1, bossPhase2:false },
+  { id:'nightmare', name:'NIGHTMARE', hpMul:1.65, spdMul:1.15, countMul:1.25, coinMul:3, specialRate:0.20, bossExtra:2, bossPhase2:false },
+  { id:'hell',      name:'HELL',      hpMul:1.90, spdMul:1.20, countMul:1.35, coinMul:5, specialRate:0.26, bossExtra:2, bossPhase2:true },
+];
+const diffOf = id => DIFFS.find(d=>d.id===id);
+const HP_CAP=2.00, SPD_CAP=1.20, COUNT_CAP=1.35;
+/* ステージ番号を4種類の「重点タイプ」に振り分ける。
+   ステージ1→30の進行度に応じて予算(難易度全体の倍率-1)を少しずつ使っていき、
+   重点の軸には多め、それ以外には控えめに配分することで「毎ステージ違う攻略」を作りつつ、
+   どのステージ・どの軸でも絶対上限(HP2.0/速度1.2/物量1.35)は超えない。 */
+function stageArchetype(stageId){ return ['hp','spd','count','special'][(stageId-1)%4]; }
+function stageMods(diffId, stageId){
+  const d=diffOf(diffId);
+  if(diffId==='normal') return { hp:1, spd:1, count:1, special:0 };
+  const prog = 0.35 + 0.65*(stageId/30);   // 序盤でも手応えがあり、終盤に向けて上限に近づく
+  const arche=stageArchetype(stageId);
+  function calc(mul, cap, name){
+    const budget=mul-1;
+    const capShare = budget>0 ? (cap-1)/budget : 0;
+    const onShare = Math.min(1.25, capShare);
+    const share = (arche===name) ? onShare : 0.6;
+    return Math.min(cap, Math.round((1+budget*prog*share)*100)/100);
+  }
+  const hp=calc(d.hpMul, HP_CAP, 'hp');
+  const spd=calc(d.spdMul, SPD_CAP, 'spd');
+  const count=calc(d.countMul, COUNT_CAP, 'count');
+  const special = arche==='special' ? Math.min(0.5, d.specialRate*(0.7+0.9*prog)) : d.specialRate*0.5*prog;
+  return { hp, spd, count, special:Math.round(special*100)/100 };
+}
+
+/* ================= 特殊敵(8種) =================
+   既存の3タイプ(normal/fast/heavy)にレイヤーとして重ねる形にし、
+   保守性を保ちつつ個別の弱点・耐性・挙動を持たせる。 */
+const SPECIALS={
+  armor:  { name:'装甲敵',   note:'貫通・爆発・レールガンに弱く、それ以外の弾は軽減する' },
+  quick:  { name:'高速敵+',  note:'非常に速いがHPは低い。冷凍銃・鳥の糞・スローが有効' },
+  swarm:  { name:'群れ敵',   note:'低HPな小型が同時に出現する。ショットガン・火炎・グレネードが有効' },
+  tough:  { name:'耐性敵',   note:'スロー・凍結の効果時間が短い(無効ではない)' },
+  split:  { name:'分裂敵',   note:'倒すと低HPの小型2体に分裂する。範囲攻撃が有効' },
+  support:{ name:'支援敵',   note:'周囲の敵を一時的に強化する。先に倒すのが有効' },
+  ghost:  { name:'透明敵',   note:'一定間隔で半透明になる(輪郭は残る)' },
+  guard:  { name:'護衛敵',   note:'ボスの周囲を移動し、攻撃の一部を身代わりにする' },
+};
+const DIFF_SPECIAL_POOL={   // 難易度が上がるほど出現する特殊敵の種類が増える
+  hard:['armor','quick','swarm'],
+  expert:['armor','quick','swarm','tough','split'],
+  nightmare:['armor','quick','swarm','tough','split','support','ghost'],
+  hell:['armor','quick','swarm','tough','split','support','ghost','guard'],
+};
+
 const DEFAULT_SAVE={
   coins:0,
   main:{handgun:{own:true,lv:1}},
@@ -767,8 +834,10 @@ const DEFAULT_SAVE={
     'uroko','okame','shirohara','youmu','momoiro','kibatan','taihaku','kongou'],   // 全16種を最初から選択可能
   birdParty:'random',
   birdData:{},   // 鳥ごとの育成記録 {lv,xp,sorties,kills,uses,skin,fav,r5,r10}
-  cleared:{},           // {stageId: {rank, score, count, day, dayCount}}
-  unlocked:1,           // 解放済み最大ステージ
+  cleared:{normal:{}, hard:{}, expert:{}, nightmare:{}, hell:{}},   // 難易度ごとに {stageId:{rank,score,count,day,dayCount}}
+  unlocked:{normal:1, hard:0, expert:0, nightmare:0, hell:0},       // 難易度ごとの解放済み最大ステージ(0=未解放)
+  diffUnlocked:['normal'],   // 選択できる難易度
+  curDiff:'normal',          // 現在選んでいる難易度
   fx:'normal', muted:false,
 };
 let sv = load();
@@ -779,6 +848,13 @@ function load(){
     const o = JSON.parse(raw);
     // 保存データが壊れていてもゲームが起動不能にならないよう、既定値で補う
     const s = Object.assign(JSON.parse(JSON.stringify(DEFAULT_SAVE)), o||{});
+    // 難易度モード導入前の旧形式(cleared/unlockedがステージ直下)をNORMALへ移行
+    if(o && o.cleared && !('normal' in o.cleared) && !Array.isArray(o.cleared)){
+      s.cleared = {normal:o.cleared, hard:{}, expert:{}, nightmare:{}, hell:{}};
+    }
+    if(o && typeof o.unlocked==='number'){
+      s.unlocked = {normal:o.unlocked, hard:0, expert:0, nightmare:0, hell:0};
+    }
     if(typeof s.coins!=='number' || !isFinite(s.coins) || s.coins<0) s.coins=0;
     if(!s.main || typeof s.main!=='object' || !s.main.handgun) s.main={handgun:{own:true,lv:1}};
     for(const k of Object.keys(s.main)){
@@ -802,6 +878,21 @@ function load(){
     }
     if(!s.ult.flame) s.ult.flame={own:true,lv:1};
     if(!ultOf(s.eqUlt) || !s.ult[s.eqUlt] || !s.ult[s.eqUlt].own) s.eqUlt='flame';
+    // 難易度データの検証
+    if(!s.cleared || typeof s.cleared!=='object') s.cleared={normal:{},hard:{},expert:{},nightmare:{},hell:{}};
+    DIFFS.forEach(d=>{ if(!s.cleared[d.id] || typeof s.cleared[d.id]!=='object') s.cleared[d.id]={}; });
+    if(!s.unlocked || typeof s.unlocked!=='object') s.unlocked={normal:1,hard:0,expert:0,nightmare:0,hell:0};
+    DIFFS.forEach(d=>{ if(typeof s.unlocked[d.id]!=='number') s.unlocked[d.id]=(d.id==='normal'?1:0); });
+    if(s.unlocked.normal<1) s.unlocked.normal=1;
+    if(!Array.isArray(s.diffUnlocked) || !s.diffUnlocked.includes('normal')) s.diffUnlocked=['normal'];
+    s.diffUnlocked=s.diffUnlocked.filter(id=>DIFFS.some(d=>d.id===id));
+    // 実際にクリア済みステージ数からも解放状況を再計算する(セーブ改変・破損対策)
+    DIFFS.forEach((d,i)=>{
+      if(i===0) return;
+      const prev=DIFFS[i-1].id;
+      if(s.unlocked[prev]>=30 && !s.diffUnlocked.includes(d.id)) s.diffUnlocked.push(d.id);
+    });
+    if(!DIFFS.some(d=>d.id===s.curDiff) || !s.diffUnlocked.includes(s.curDiff)) s.curDiff='normal';
     // 鳥データの検証: すべての鳥は最初から選択可能
     s.birdUnlocked=BIRDS.map(b=>b.id);
     // 鳥育成データ: 存在しなければ初期値を自動生成(既存セーブ互換)
@@ -1345,8 +1436,20 @@ function buildWaves(st){
   out.forEach(w=>w.sort(()=>Math.random()-0.5));
   return out;
 }
+let curMods={hp:1,spd:1,count:1,special:0};
 function startStage(id){
-  stageId=id; S=stageOf(id);
+  stageId=id;
+  curMods = stageMods(sv.curDiff, id);
+  // stageOf()は共有配列への直接参照を返すため、難易度補正をかける前に必ずコピーする
+  const base = stageOf(id);
+  S = Object.assign({}, base, { comp: Object.assign({}, base.comp) });
+  S.hp = Math.round(base.hp * curMods.hp);
+  S.spd = Math.round(base.spd * curMods.spd * 100) / 100;
+  for(const k of Object.keys(S.comp)){
+    S.comp[k] = Math.max(S.comp[k]>0?1:0, Math.round(S.comp[k]*curMods.count));
+  }
+  S.count = Object.values(S.comp).reduce((a,b)=>a+b,0);
+  S.cap = Math.min(10, Math.round(base.cap*Math.min(1.2,curMods.count)));
   enemies=[]; bullets=[]; parts=[]; floats=[]; fx=[];
   gatlingRamp=0; pendingRail=0; pendingRailDmg=0;
   subCd=0; ultGauge=0; subUses=0; ultUses=0; dots=[]; sweeps=[]; barrierT=0;
@@ -1378,14 +1481,30 @@ function showPads(on){
 }
 function spawnEnemy(type){
   const T=ENEMY_TYPES[type];
-  const hp=Math.round(S.hp*T.hp);
+  let hp=Math.round(S.hp*T.hp);
+  let spdMul=1, sizeMul=1;
+  // 難易度に応じて低確率で特殊敵になる(NORMALでは発生しない)
+  let spec=null;
+  const pool=DIFF_SPECIAL_POOL[sv.curDiff];
+  if(pool && Math.random()<curMods.special){
+    spec = pool[Math.floor(Math.random()*pool.length)];
+    if(spec==='armor'){ hp=Math.round(hp*1.15); }                 // HPは極端に上げない
+    else if(spec==='quick'){ hp=Math.round(hp*0.6); spdMul=1.6; sizeMul=0.92; }
+    else if(spec==='swarm'){ hp=Math.round(hp*0.45); sizeMul=0.8; }
+    else if(spec==='tough'){ /* HPそのままで状態異常耐性 */ }
+    else if(spec==='split'){ hp=Math.round(hp*1.1); }
+    else if(spec==='support'){ hp=Math.round(hp*1.2); }
+    else if(spec==='ghost'){ /* 見た目のみ変化 */ }
+    else if(spec==='guard'){ hp=Math.round(hp*0.85); }
+  }
   // 敵同士が重ならないよう、直近の敵から最低距離をあける
   let x=W+30+Math.random()*40;
   for(const e of enemies) if(e.alive && e.x>W-40) x=Math.max(x, e.x+46);
   enemies.push({ type, x, y:GROUND, hp, maxHp:hp,
-    spd:(S.spd*T.spd)*(W-DEF_X)/(8*60), // 1.00倍で端から防衛ラインまで約8秒
-    scale:1.7*T.size, walk:Math.random()*6, flash:0, alive:true,
-    shield:!!T.shield, shieldUsed:false, dying:0 });
+    spd:(S.spd*T.spd*spdMul)*(W-DEF_X)/(8*60), // 1.00倍で端から防衛ラインまで約8秒
+    scale:1.7*T.size*sizeMul, walk:Math.random()*6, flash:0, alive:true,
+    shield:!!T.shield, shieldUsed:false, dying:0, spec, ghostT:Math.random()*180,
+    guardSide: Math.random()<0.5, buffSpd:0 });
   spawned++;
 }
 /* ================= 仲間の鳥(BirdManager / BirdAI) ================= */
@@ -1754,6 +1873,35 @@ function updateBoss(e){
     e.x=DEF_X+190;
     if(defHp<=0){ endStage(false); return; }
   }
+  applyDiffBossExtra(e, hpR);
+}
+/* 難易度別のボス追加攻撃パターン。ボスごとの個別挙動には手を加えず、
+   共通の追加パターンを上乗せする方式(EXPERT+1種・NIGHTMARE+2種・HELLは追加で第2形態)。 */
+function applyDiffBossExtra(e, hpR){
+  const d=diffOf(sv.curDiff);
+  if(d.bossExtra>=1){
+    // 追加パターン1(EXPERT〜): 一定間隔で雑魚を1体差し込む
+    if(--e.exSummonT<=0 || e.exSummonT===undefined){
+      e.exSummonT=500;
+      summonMinions([Math.random()<0.5?'fast':'normal']);
+    }
+  }
+  if(d.bossExtra>=2){
+    // 追加パターン2(NIGHTMARE〜): 一定間隔で防衛ラインへ遠隔弾(小ダメージ)
+    if(--e.exShotT<=0 || e.exShotT===undefined){
+      e.exShotT=280;
+      fx.push({kind:'ring',x:DEF_X+40,y:GROUND-60,r:55,life:14});
+      defHp=Math.max(0,defHp-1); damageTaken+=1;
+      addFloat(DEF_X+40,GROUND-140,'-1','#ff8a3a');
+      if(defHp<=0){ endStage(false); return; }
+    }
+  }
+  if(d.bossPhase2 && hpR<=0.5 && !e.hellPhase2){
+    // HELL専用の第2形態(HP50%): 速度上昇+赤いオーラは描画側で表示
+    e.hellPhase2=true; e.baseSpd*=1.2;
+    addFloat(e.x,e.y-190,'HELL第2形態!!','#ff4a4a');
+    shake=Math.max(shake,10); SFX.bossAppear();
+  }
 }
 function addFloat(x,y,t,c){ floats.push({x,y,t,c,life:50}); }
 function burst(x,y,c,n){
@@ -1761,8 +1909,15 @@ function burst(x,y,c,n){
   for(let i=0;i<q;i++) parts.push({x,y,vx:(Math.random()-0.5)*5,vy:-Math.random()*4-1,life:22,c});
 }
 
+/* 状態異常耐性敵(tough)は効果時間が短い(無効ではない) */
+function toughMul(e){ return e.spec==='tough' ? 0.5 : 1; }
 function hitEnemy(e,dmg,death){
   if(!e.alive) return;
+  // 装甲敵: 貫通・爆発・レールガン系は弱点、それ以外は軽減する(HPそのものは極端に高くしない)
+  if(e.spec==='armor'){
+    const strong = ['beam','rail','plasma','grenade'].includes(death);
+    dmg *= strong ? 1.15 : 0.55;
+  }
   // ボスの特殊防御
   if(e.boss){
     if(e.invincT>0){ addFloat(e.x,e.y-190,'ムテキ','#ffd94a'); return; }
@@ -1783,6 +1938,17 @@ function hitEnemy(e,dmg,death){
   if(e.hp<=0){
     e.alive=false; e.dying=1;
     e.deathKind = death || 'handgun';
+    // 分裂敵: 倒すと低HPの小型2体に分裂する(分裂後の子は再分裂しない)
+    if(e.spec==='split' && !e.isSplit && !e.boss){
+      for(let i=0;i<2;i++){
+        const T=ENEMY_TYPES[e.type];
+        const chp=Math.max(1,Math.round(e.maxHp*0.28));
+        enemies.push({ type:e.type, x:e.x+(i?18:-18), y:e.y, hp:chp, maxHp:chp,
+          spd:e.spd*1.15, scale:e.scale*0.62, walk:Math.random()*6, flash:0, alive:true,
+          shield:false, shieldUsed:true, dying:0, spec:null, isSplit:true, ghostT:0 });
+      }
+      addFloat(e.x,e.y-100*e.scale,'分裂!','#c77dff');
+    }
     // 倒れ方ごとの初期パラメータ
     if(e.deathKind==='shotgun'){ e.dvx=9+Math.random()*3; e.rot=0; }
     else if(e.deathKind==='grenade'){ e.dvx=3; e.dvy=-6.5; e.rot=0; }
@@ -1827,13 +1993,14 @@ function hitEnemy(e,dmg,death){
     if(e.boss){
       bossDone=true;
       document.getElementById('bossBarWrap').classList.remove('show');
-      earned+=e.reward;
-      addFloat(e.x,e.y-160,'ボス撃破! +$'+e.reward.toLocaleString(),'#ffd94a');
+      const bossCoin=Math.round(e.reward * diffOf(sv.curDiff).coinMul);
+      earned+=bossCoin;
+      addFloat(e.x,e.y-160,'ボス撃破! +$'+bossCoin.toLocaleString(),'#ffd94a');
       shake=Math.max(shake,14); SFX.bossKill(); vib([60,40,60,40,120]);
     }
     const band=COIN_TABLE[coinBand(stageId)];
     const r=band[e.type]||band.normal;
-    let coin=Math.round(e.boss?0:(r[0]+Math.random()*(r[1]-r[0])));
+    let coin=Math.round((e.boss?0:(r[0]+Math.random()*(r[1]-r[0]))) * diffOf(sv.curDiff).coinMul);
     earned+=coin;
     if(!e.boss) addFloat(e.x,e.y-100,'+$'+coin,'#ffd94a');
     burst(e.x,e.y-50,TYPE_COLOR[e.type][0],10);
@@ -2035,7 +2202,7 @@ function onProjectileHit(b,e){
       const dur=b.lv>=5?120:75;
       for(const o of enemies){
         if(o.alive && Math.abs(o.x-e.x)<55){
-          o.stagger=Math.max(o.stagger||0,dur);
+          o.stagger=Math.max(o.stagger||0,Math.round(dur*toughMul(o)));
           hitEnemy(o, o===e?b.dmg:b.dmg*0.6, 'sonic');
         }
       }
@@ -2063,7 +2230,7 @@ function onProjectileHit(b,e){
     }
     case 'freeze':
       hitEnemy(e,b.dmg,'freeze');
-      if(e.alive){ e.frozen=90; if(b.lv>=5) e.freezeBonus=true; }
+      if(e.alive){ e.frozen=Math.round(90*toughMul(e)); if(b.lv>=5) e.freezeBonus=true; }
       break;
     case 'plasma':
       // 着弾地点で範囲爆発(Lv5で範囲20%拡大)
@@ -2075,11 +2242,11 @@ function onProjectileHit(b,e){
       break;
     case 'sub_box':
       hitEnemy(e,b.dmg,'cardboard');
-      if(e.alive){ e.stunT=b.stun; e.boxed=b.stun; }
+      if(e.alive){ e.stunT=Math.round(b.stun*toughMul(e)); e.boxed=e.stunT; }
       break;
     case 'sub_film':
       hitEnemy(e,b.dmg,'film');
-      if(e.alive){ e.stunT=b.bind; e.wrapped=b.bind; }
+      if(e.alive){ e.stunT=Math.round(b.bind*toughMul(e)); e.wrapped=e.stunT; }
       break;
     case 'sub_pallet':
       hitEnemy(e,b.dmg,'pallet');
@@ -2093,7 +2260,7 @@ function onProjectileHit(b,e){
         const f=abilityCtx.flinch;
         if(f && e.alive && !(e.flinchCd>0) && Math.random()<f.rate){
           if(e.boss){ e.poopT=Math.max(e.poopT||0,30); }   // ボスは停止せず短い減速扱い
-          else e.stunT=Math.max(e.stunT||0, f.dur);
+          else e.stunT=Math.max(e.stunT||0, Math.round(f.dur*toughMul(e)));
           e.flinchCd=90;   // 同じ敵への連続発動を防ぐ
           addFloat(e.x,e.y-116*e.scale,'★','#ffd94a');
           sv.birdData[f.bird.def.id].uses++;
@@ -2101,7 +2268,7 @@ function onProjectileHit(b,e){
       }
       // 戦術模倣の追加効果
       if(b.mimicBlast){ explodeAt(e.x,e.y-50,55,Math.round(b.dmg*b.mimicBlast*3),curMain().death); }
-      if(b.mimicSlow && e.alive){ e.stagger=Math.max(e.stagger||0,b.mimicSlow); }
+      if(b.mimicSlow && e.alive){ e.stagger=Math.max(e.stagger||0,Math.round(b.mimicSlow*toughMul(e))); }
       if(b.mimicChain){
         let best=null,bd=120;
         for(const o of enemies){ if(o.alive&&o!==e){ const dd=Math.abs(o.x-e.x); if(dd<bd){bd=dd;best=o;} } }
@@ -2116,7 +2283,7 @@ function onProjectileHit(b,e){
       if(!(e.poopT>0)){
         let dur=120*(abilityCtx?abilityCtx.poopDurMul:1);
         if(e.boss) dur=120+(dur-120)*0.5;
-        e.poopT=Math.round(dur);
+        e.poopT=Math.round(dur*toughMul(e));
         addFloat(e.x,e.y-120*e.scale,'ポフッ 💩','#f0f0e0');
         SFX.poop();
       }
@@ -2283,6 +2450,25 @@ function update(){
     if(e.stagger>0) e.stagger--;
     if(e.poopT>0){ e.poopT--; sp*=0.8; }       // 糞: 20%減速
     if(e.flinchCd>0) e.flinchCd--;
+    // 透明敵: 一定間隔で半透明になる(輪郭は残す。当たり判定・耐久は変えない)
+    if(e.spec==='ghost'){ e.ghostT=(e.ghostT+1)%180; }
+    // 護衛敵: ボスの近くにとどまり続ける
+    if(e.spec==='guard' && bossRef && bossRef.alive){
+      const gx=bossRef.x + (e.guardSide?60:-60);
+      sp = e.spd; e.x += (gx-e.x)*0.05 - sp*0.3;
+      e.walk+=0.12;
+      continue;
+    }
+    // 支援敵: 周囲の敵を一定間隔で強化(速度+15%を2秒、重ね掛けなし)
+    if(e.spec==='support'){
+      e.supportT=(e.supportT||90)-1;
+      if(e.supportT<=0){
+        e.supportT=150;
+        for(const o of enemies){ if(o.alive && o!==e && Math.abs(o.x-e.x)<130){ o.buffSpd=120; } }
+        fx.push({kind:'ring',x:e.x,y:e.y-50,r:70,life:12});
+      }
+    }
+    if(e.buffSpd>0){ e.buffSpd--; sp*=1.15; }
     // 鳥の常時スロー+一時スロー(通常敵への合算は最大30%に制限)
     if(abilityCtx){
       let slow=abilityCtx.passiveSlow + (tempSlowT>0?tempSlowMul:0);
@@ -2332,10 +2518,21 @@ function draw(){
   drawBirds();
 
   // 敵
+  const SPEC_ICON={armor:'🛡️',quick:'⚡',swarm:'👥',tough:'🔒',split:'✂️',support:'🔧',ghost:'👻',guard:'🐾'};
   for(const e of enemies){
     if(!e.alive){ drawDeadEnemy(e); continue; }
     const ey = e.y + (e.yOff||0);
+    // 透明敵: 半透明⇔ほぼ通常の間を往復(輪郭代わりに薄い縁取りを残す)
+    if(e.spec==='ghost'){
+      const ghostAlpha = 0.35+0.45*Math.abs(Math.sin(e.ghostT/180*Math.PI));
+      ctx.globalAlpha=ghostAlpha;
+    }
     drawEnemyArt(ctx,e.x,ey,-1,e.walk,cfgFor(e),e.flash,e.scale,e.type);
+    ctx.globalAlpha=1;
+    if(e.spec && SPEC_ICON[e.spec] && !e.boss){
+      ctx.font='11px sans-serif'; ctx.textAlign='center';
+      ctx.fillText(SPEC_ICON[e.spec], e.x, ey-104*e.scale);
+    }
     if(e.boss){
       // BOSSラベル
       ctx.fillStyle='#ff5a4a'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center';
@@ -2352,8 +2549,8 @@ function draw(){
         ctx.fillStyle='#6ba3e0'; ctx.font='bold 11px sans-serif';
         ctx.fillText('シールド '+e.shieldHits, e.x, ey-128*e.scale);
       }
-      // 第二形態の赤いオーラ(最終ボス)
-      if(e.phase>=4){
+      // 第二形態の赤いオーラ(最終ボスphase4、またはHELL第2形態)
+      if(e.phase>=4 || e.hellPhase2){
         ctx.strokeStyle='rgba(255,74,74,.6)'; ctx.lineWidth=5;
         ctx.beginPath(); ctx.arc(e.x,ey-55*e.scale,62*e.scale+Math.sin(performance.now()/80)*5,0,Math.PI*2); ctx.stroke();
       }
@@ -2985,7 +3182,8 @@ function loop(){
   requestAnimationFrame(loop);
 }
 function refreshHud(){
-  document.getElementById('hStage').textContent='STAGE '+stageId+(S.boss?' (ボス)':'');
+  document.getElementById('hStage').textContent=
+    'STAGE '+stageId+(S.boss?' (ボス)':'')+(sv.curDiff!=='normal'?' ['+diffOf(sv.curDiff).name+']':'');
   document.getElementById('hDef').textContent='防衛 '+defHp+'/'+defMax;
   document.getElementById('defBar').style.width=(defHp/defMax*100)+'%';
   document.getElementById('defBar').style.background = defHp/defMax<0.34?'#ff4a4a':defHp/defMax<0.67?'#ff8a3a':'#5be36b';
@@ -3027,7 +3225,7 @@ function endStage(win){
   running=false;
   showPads(false);
   document.getElementById('hud').classList.remove('show');
-  const rec = sv.cleared[stageId];
+  const rec = sv.cleared[sv.curDiff][stageId];
   const first = win && !rec;
   const day=today();
   let dayCount = (rec && rec.day===day) ? rec.dayCount : 0;
@@ -3060,8 +3258,19 @@ function endStage(win){
   if(win){
     const best = rec && rec.score>score ? rec.score : score;
     const bestRank = rec && 'SABCD'.indexOf(rec.rank) < 'SABCD'.indexOf(rank) ? rec.rank : rank;
-    sv.cleared[stageId] = { rank:bestRank, score:best, count:(rec?rec.count:0)+1, day, dayCount };
-    if(stageId>=sv.unlocked && stageId<30) sv.unlocked=stageId+1;
+    sv.cleared[sv.curDiff][stageId] = { rank:bestRank, score:best, count:(rec?rec.count:0)+1, day, dayCount };
+    if(stageId>=sv.unlocked[sv.curDiff] && stageId<30) sv.unlocked[sv.curDiff]=stageId+1;
+    // 全30ステージクリアで次の難易度を解放する
+    if(stageId===30){
+      sv.unlocked[sv.curDiff]=30;
+      const idx=DIFFS.findIndex(d=>d.id===sv.curDiff);
+      const next=DIFFS[idx+1];
+      if(next && !sv.diffUnlocked.includes(next.id)){
+        sv.diffUnlocked.push(next.id);
+        if(sv.unlocked[next.id]<1) sv.unlocked[next.id]=1;
+        bonusRows.push(['🔓 新しい難易度解放!', next.name]);
+      }
+    }
   }
   // 小さな幸運(キンカチョウ): ステージ終了時の獲得コイン増加(上限+25%)
   if(abilityCtx && abilityCtx.stageCoin>0 && earned>0){
@@ -3100,7 +3309,7 @@ function showResult(win,rank,score,base,bonusRows,first){
     html+='<div class="res-row"><span>基本クリア報酬</span><b>$'+base+'</b></div>';
   }
   bonusRows.forEach(([a,b])=>html+='<div class="res-row bonus"><span>'+a+'</span><span>'+b+'</span></div>');
-  const rec=sv.cleared[stageId];
+  const rec=sv.cleared[sv.curDiff][stageId];
   if(win && rec && rec.score===score && rec.count===1) html+='<div class="res-row bonus"><span>🏆 ハイスコア</span><span>NEW</span></div>';
   document.getElementById('resRows').innerHTML=html;
   document.getElementById('resNext').style.display = (win && stageId<30)?'block':'none';
@@ -3176,24 +3385,30 @@ function showScreen(id){
 function refreshTitle(){
   document.getElementById('titleCoins').textContent='$'+sv.coins;
   document.getElementById('stageCoins').textContent='$'+sv.coins;
-  const done=Object.keys(sv.cleared).length;
-  document.getElementById('titleInfo').textContent='クリア '+done+' / 30 ステージ ・ 装備: '+curMain().name+' Lv'+curLv();
+  document.getElementById('diffLabel').textContent=diffOf(sv.curDiff).name;
+  const done=Object.keys(sv.cleared[sv.curDiff]||{}).length;
+  document.getElementById('titleInfo').textContent=
+    diffOf(sv.curDiff).name+' クリア '+done+' / 30 ステージ ・ 装備: '+curMain().name+' Lv'+curLv();
 }
 function renderStages(){
   const grid=document.getElementById('stageGrid');
   grid.innerHTML='';
+  const unlockedTo = sv.unlocked[sv.curDiff]||0;
+  const clearedMap = sv.cleared[sv.curDiff]||{};
   STAGES.forEach(st=>{
-    const locked = st.id>sv.unlocked;
-    const rec=sv.cleared[st.id];
+    const locked = st.id>unlockedTo;
+    const rec=clearedMap[st.id];
     const d=document.createElement('div');
     d.className='st-card'+(locked?' locked':'')+(st.boss?' boss':'');
     const band=COIN_TABLE[coinBand(st.id)];
-    const est=Math.round(st.count*(band.normal[0]+band.normal[1])/2 + (st.boss?BOSSES[st.boss-1].reward:0));
+    const dm=stageMods(sv.curDiff, st.id);
+    const est=Math.round(st.count*dm.count*(band.normal[0]+band.normal[1])/2*diffOf(sv.curDiff).coinMul
+      + (st.boss?BOSSES[st.boss-1].reward*diffOf(sv.curDiff).coinMul:0));
     d.innerHTML =
       '<div class="no">'+(locked?'🔒':st.id)+(rec?' ✓':'')+'</div>'+
       (st.boss?'<div class="bosstag">BOSS'+(BOSSES[st.boss-1].final?'(最終)':'')+'</div>':'')+
       '<div class="rec">'+mainOf(st.rec).name+'</div>'+
-      '<div class="meta">HP'+st.hp+' / 敵'+st.count+'</div>'+
+      '<div class="meta">HP'+Math.round(st.hp*dm.hp)+' / 敵'+Math.round(st.count*dm.count)+'</div>'+
       '<div class="meta">目安 $'+est.toLocaleString()+'</div>'+
       (rec?'<div class="meta" style="color:#ffd94a;">スコア '+rec.score.toLocaleString()+'</div>':'')+
       (rec?'<div class="rank">'+rec.rank+'</div>':'');
@@ -3584,6 +3799,41 @@ document.getElementById('resetYes').onclick=()=>{
 
 document.getElementById('goShop').onclick=()=>{ SFX.tap(); showScreen('scrShop'); renderShop(); };
 document.getElementById('shopBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
+
+/* ================= 難易度選択 ================= */
+function renderDiffList(){
+  const list=document.getElementById('diffList');
+  list.innerHTML='';
+  DIFFS.forEach((d,i)=>{
+    const unlocked=sv.diffUnlocked.includes(d.id);
+    const prev=DIFFS[i-1];
+    const row=document.createElement('div');
+    row.className='shop-row'+(unlocked?'':' locked')+(sv.curDiff===d.id?' equipped':'');
+    const clearedCnt=Object.keys(sv.cleared[d.id]||{}).length;
+    let meta;
+    if(d.id==='normal') meta='通常の全30ステージ。まずはここから。';
+    else meta='敵HP最大×'+d.hpMul+' 速度最大×'+d.spdMul+' 物量最大×'+d.countMul+' ・ 獲得コイン×'+d.coinMul;
+    const name=document.createElement('div');
+    name.className='shop-name';
+    name.innerHTML='<span>'+(unlocked?'':'🔒 ')+d.name+'</span>'+(sv.curDiff===d.id?'<span class="lv">選択中</span>':'');
+    row.appendChild(name);
+    const metaDiv=document.createElement('div');
+    metaDiv.className='shop-meta';
+    metaDiv.textContent = unlocked ? (meta+' ・ クリア '+clearedCnt+'/30') : (prev.name+'を全30ステージクリアすると解放');
+    row.appendChild(metaDiv);
+    if(unlocked && sv.curDiff!==d.id){
+      const btn=document.createElement('button');
+      btn.className='shop-btn eq';
+      btn.textContent='この難易度で遊ぶ';
+      btn.onclick=()=>{ sv.curDiff=d.id; save(); SFX.tap(); renderDiffList(); refreshTitle(); };
+      const btnWrap=document.createElement('div'); btnWrap.className='shop-btns';
+      btnWrap.appendChild(btn); row.appendChild(btnWrap);
+    }
+    list.appendChild(row);
+  });
+}
+document.getElementById('goDiff').onclick=()=>{ SFX.tap(); showScreen('scrDiff'); renderDiffList(); };
+document.getElementById('diffBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
 
 document.getElementById('goStages').onclick=()=>{ SFX.tap(); showScreen('scrStages'); renderStages(); };
 document.getElementById('stagesBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
