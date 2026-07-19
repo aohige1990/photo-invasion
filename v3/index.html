@@ -2054,28 +2054,47 @@ const HARMS={
    breath:息(vol比) harsh:ざらつき(vol比) lp:低域通過Hz */
 const VOICES={
   kinka:     { syls:[[1900,.05],[1900,.05]], gap:.09, vol:.05, harm:'thin', vib:[0,0], trem:[0,0], breath:.2, form:1.7 },
-  canaria:   { syls:[[1500,.09],[1850,.07],[1400,.08],[2000,.10],[1650,.09]], gap:.015, vol:.05, harm:'pure', vib:[7,12], trem:[24,.06], breath:.15, form:1.6 },
+  canaria:   { syls:[{d:.10,f:[1500,1950,1650]},{d:.09,f:[1750,2150,1850]},{d:.10,f:[1600,2050,1500,1900]},{d:.11,f:[1900,1500,2000,1700]}], gap:.02, vol:.05, harm:'pure', vib:[8,16], trem:[26,.05], breath:.18, form:1.7, wobble:[.02,5] },
   bunchou:   { syls:[[1500,.07,900]], gap:0, vol:.06, harm:'thin', vib:[0,0], trem:[0,0], breath:.25, form:1.5 },
   mameruriha:{ syls:[[2500,.045],[2650,.045],[2550,.045]], gap:.025, vol:.045, harm:'thin', vib:[0,0], trem:[0,0], breath:.2, form:1.4 },
-  botan:     { syls:[[1050,.08],[1100,.08]], gap:.05, vol:.075, harm:'reed', vib:[0,0], trem:[30,.10], breath:.35, form:1.8, harsh:.15 },
-  kozakura:  { syls:[[1500,.06],[1800,.05],[1400,.07,1700]], gap:.03, vol:.06, harm:'soft', vib:[6,10], trem:[0,0], breath:.25, form:1.6 },
-  sekisei:   { syls:[[1700,.03],[1500,.03],[1850,.03],[1600,.03],[1950,.03],[1450,.03]], gap:.015, vol:.04, harm:'thin', vib:[0,0], trem:[46,.14], breath:.15, form:1.5 },
-  sazanami:  { syls:[[680,.16]], gap:0, vol:.032, harm:'pure', vib:[5,8], trem:[0,0], breath:.15, form:1.7 },
-  uroko:     { syls:[[520,.07],[480,.06]], gap:.03, vol:.055, harm:'reed', vib:[0,0], trem:[0,0], breath:.35, form:1.8, harsh:.2 },
+  botan:     { syls:[{d:.09,f:[900,1450,1200]},{d:.08,f:[1000,1550,1250]},{d:.09,f:[950,1500,1100]}], gap:.05, vol:.075, harm:'reed', vib:[11,14], trem:[34,.10], breath:.35, form:1.8, harsh:.2 },
+  kozakura:  { syls:[{d:.10,f:[1300,1750,1500]},{d:.09,f:[1550,1900,1650]},{d:.11,f:[1400,1800,1350,1700]}], gap:.03, vol:.06, harm:'soft', vib:[7,14], trem:[0,0], breath:.28, form:1.6, wobble:[.018,4] },
+  sekisei:   { syls:[{d:.05,f:[1700,2050]},{d:.05,f:[1900,1550]},{d:.06,f:[1500,1950,1700]},{d:.05,f:[2000,1650]},{d:.06,f:[1600,2100,1800]},{d:.05,f:[1850,1450]},{d:.06,f:[1550,1950,1600]}], gap:.012, vol:.042, harm:'thin', vib:[0,0], trem:[40,.12], breath:.14, form:1.6, wobble:[.03,3] },
+  sazanami:  { syls:[{d:.16,f:[640,720,650,700]}], gap:0, vol:.034, harm:'pure', vib:[6,10], trem:[0,0], breath:.16, form:1.7, wobble:[.02,3] },
+  uroko:     { syls:[{d:.14,f:[900,700,820]},{d:.13,f:[820,620,720]}], gap:.04, vol:.07, harm:'harshset', vib:[18,20], trem:[0,0], breath:.4, form:1.6, harsh:.4, rough:[80,.18] },
   okame:     { syls:[[1450,.15,2050]], shape:'chevron', hi:2550, nSyl:[2,3], gap:.06, vol:.075, harm:'okame', vib:[14,10], trem:[42,.18], breath:.35, form:'okame' },
-  shirohara: { syls:[[780,.09],[820,.08]], gap:.04, vol:.065, harm:'square', vib:[0,0], trem:[0,0], breath:.35, form:1.9 },
+  shirohara: { syls:[{d:.12,f:[900,1500,1200]},{d:.10,f:[1300,1900,1500]},{d:.11,f:[1100,1700,1250]}], gap:.04, vol:.065, harm:'square', vib:[9,12], trem:[0,0], breath:.35, form:1.8, wobble:[.02,3] },
   youmu:     { syls:[[280,.28]], gap:0, vol:.06, harm:'reed', vib:[9,7], trem:[0,0], breath:.3, form:1.6, lp:900 },
-  momoiro:   { syls:[[640,.20]], gap:0, vol:.05, harm:'soft', vib:[5,7], trem:[0,0], breath:.2, form:1.7 },
-  kibatan:   { syls:[[520,.32]], gap:0, vol:.11, harm:'harshset', vib:[0,0], trem:[18,.12], breath:.5, form:1.5, harsh:.6, lp:2600 },
-  taihaku:   { syls:[[880,.42]], gap:0, vol:.12, harm:'harshset', vib:[4,26], trem:[0,0], breath:.5, form:1.6, harsh:.55 },
-  kongou:    { syls:[[330,.26],[260,.22]], gap:.06, vol:.10, harm:'harshset', vib:[0,0], trem:[16,.10], breath:.5, form:1.5, harsh:.6, lp:1100 },
+  momoiro:   { syls:[{d:.20,f:[620,760,640,700]}], gap:0, vol:.05, harm:'soft', vib:[6,12], trem:[0,0], breath:.22, form:1.7, wobble:[.02,3] },
+  kibatan:   { syls:[{d:.34,f:[900,600,720,520]}], gap:0, vol:.11, harm:'harshset', vib:[16,40], trem:[0,0], breath:.5, form:1.5, harsh:.7, rough:[70,.22], lp:2800 },
+  taihaku:   { syls:[{d:.40,f:[820,1050,880,980,820]}], gap:0, vol:.12, harm:'harshset', vib:[14,50], trem:[0,0], breath:.5, form:1.6, harsh:.6, rough:[64,.20] },
+  kongou:    { syls:[{d:.26,f:[420,300,360]},{d:.22,f:[360,250,300]}], gap:.06, vol:.10, harm:'harshset', vib:[0,0], trem:[0,0], breath:.5, form:1.5, harsh:.75, rough:[58,.22], lp:1200 },
 };
-function voiceSyllable(c,t0,f0,fTo,hi,dur,vol,o){
-  const N=32, curve=new Float32Array(N);
+/* 折れ線の周波数点をcosine補間でなめらかにつなぎ、音の中でピッチが動く輪郭を作る。
+   これが無い(平坦)と合成トーン=電子音に聞こえやすい。 */
+function contour(pts,N){
+  const out=new Float32Array(N);
+  if(pts.length===1){ out.fill(Math.max(60,pts[0])); return out; }
+  const seg=pts.length-1;
   for(let i=0;i<N;i++){
-    const p=i/(N-1);
-    curve[i]=Math.max(60, hi ? (p<0.35 ? f0+(hi-f0)*(p/0.35) : hi+(fTo-hi)*((p-0.35)/0.65)) : f0+(fTo-f0)*p);
+    const tt=i/(N-1)*seg;
+    const k=Math.min(seg-1, Math.floor(tt));
+    const f=tt-k, m=(1-Math.cos(f*Math.PI))/2;
+    out[i]=Math.max(60, pts[k]*(1-m)+pts[k+1]*m);
   }
+  return out;
+}
+function voiceSyllable(c,t0,f0,fTo,hi,dur,vol,o,pts){
+  const N=32; let curve;
+  if(pts){ curve=contour(pts,N); }
+  else {
+    curve=new Float32Array(N);
+    for(let i=0;i<N;i++){
+      const p=i/(N-1);
+      curve[i]=Math.max(60, hi ? (p<0.35 ? f0+(hi-f0)*(p/0.35) : hi+(fTo-hi)*((p-0.35)/0.65)) : f0+(fTo-f0)*p);
+    }
+  }
+  if(o.wobbleAmt>0){ for(let i=0;i<N;i++){ curve[i]=Math.max(60, curve[i]*(1+o.wobbleAmt*Math.sin(2*Math.PI*o.wobbleCyc*(i/(N-1))))); } }
   const master=c.createGain();
   master.gain.setValueAtTime(0.0001,t0);
   master.gain.exponentialRampToValueAtTime(vol, t0+Math.min(0.012,dur*0.25));
@@ -2091,6 +2110,11 @@ function voiceSyllable(c,t0,f0,fTo,hi,dur,vol,o){
     const tr=c.createOscillator(), tg=c.createGain();
     tr.frequency.value=o.tremRate; tg.gain.value=vol*o.tremDepth;
     tr.connect(tg); tg.connect(master.gain); tr.start(t0); tr.stop(t0+dur+0.02);
+  }
+  if(o.roughDepth>0){
+    const rr=c.createOscillator(), rgn=c.createGain();
+    rr.frequency.value=o.roughRate; rgn.gain.value=vol*o.roughDepth;
+    rr.connect(rgn); rgn.connect(master.gain); rr.start(t0); rr.stop(t0+dur+0.02);
   }
   let vibG=null;
   if(o.vibDepth>0){
@@ -2137,7 +2161,9 @@ function playVoice(id, x){
     form: (v.form===undefined?1.7:v.form),
     tremRate:(v.trem?v.trem[0]:0), tremDepth:(v.trem?v.trem[1]:0),
     vibHz:(v.vib?v.vib[0]:0), vibDepth:(v.vib?v.vib[1]:0),
-    breath:(v.breath||0), harsh:(v.harsh||0), lp:(v.lp||0)
+    breath:(v.breath||0), harsh:(v.harsh||0), lp:(v.lp||0),
+    wobbleAmt:(v.wobble?v.wobble[0]:0), wobbleCyc:(v.wobble?v.wobble[1]:0),
+    roughRate:(v.rough?v.rough[0]:0), roughDepth:(v.rough?v.rough[1]:0)
   };
   let t=t0;
   if(v.nSyl){
@@ -2145,16 +2171,22 @@ function playVoice(id, x){
     const s=v.syls[0], f0=s[0], dur0=s[1], to=(s[2]||s[0]);
     for(let i=0;i<n;i++){
       const sj=0.97+Math.random()*0.06, dur=dur0+Math.random()*0.04;
-      voiceSyllable(c,t, f0*baseJit*sj, to*baseJit*sj, (v.hi||0)*baseJit*sj, dur, v.vol*distMul, o);
+      voiceSyllable(c,t, f0*baseJit*sj, to*baseJit*sj, (v.hi||0)*baseJit*sj, dur, v.vol*distMul, o, null);
       t += dur + (v.gap||0) + Math.random()*0.03;
     }
   } else {
     v.syls.forEach(s=>{
-      const f0=s[0], dur=s[1], to=(s[2]||s[0]);
       const sj=0.98+Math.random()*0.04;
-      const hi=(v.shape==='chevron'?(v.hi||0):0)*baseJit*sj;
-      voiceSyllable(c,t, f0*baseJit*sj, to*baseJit*sj, hi, dur, v.vol*distMul, o);
-      t += dur + (v.gap||0);
+      if(Array.isArray(s)){
+        const f0=s[0], dur=s[1], to=(s[2]||s[0]);
+        const hi=(v.shape==='chevron'?(v.hi||0):0)*baseJit*sj;
+        voiceSyllable(c,t, f0*baseJit*sj, to*baseJit*sj, hi, dur, v.vol*distMul, o, null);
+        t += dur + (v.gap||0);
+      } else {
+        const dur=s.d, pts=s.f.map(f=>f*baseJit*sj);
+        voiceSyllable(c,t, pts[0], pts[pts.length-1], 0, dur, v.vol*distMul, o, pts);
+        t += dur + (v.gap||0) + Math.random()*0.02;
+      }
     });
   }
 }
