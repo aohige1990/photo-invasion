@@ -414,6 +414,14 @@
     <button class="btn sub" id="settingsFullBtn" style="font-size:13px;">全画面にする</button>
   </div>
   <div class="set-block">
+    <div class="set-label">鳴き声テスト(オカメ)</div>
+    <div class="set-row">
+      <button class="set-btn" id="okameOldBtn">旧オカメ</button>
+      <button class="set-btn" id="okameNewBtn">新オカメ</button>
+    </div>
+    <p class="hint" style="font-size:11px;">聞き比べ用の一時ボタンです。方針が決まったら外します。サウンドがONのとき鳴ります。</p>
+  </div>
+  <div class="set-block">
     <div class="set-label">セーブデータ</div>
     <button class="btn sub" id="resetSave" style="background:#5c2430;box-shadow:0 4px 0 #3a1620;">データを初期化する</button>
     <p class="hint" style="font-size:11px;">コイン・武器・ステージの進行がすべて消えます。</p>
@@ -2013,6 +2021,7 @@ const BIRD_CALLS={
 /* 鳥の鳴き声を再生する。x座標に応じて画面中央より端の方が少し小さくなる。個体差でわずかにピッチをずらす。 */
 function playBirdCall(birdId, x){
   if(sv.muted) return;
+  if(birdId==='okame'){ playOkameNew(x); return; }
   const call=BIRD_CALLS[birdId]; if(!call) return;
   try{
     const c=ac(), t0=c.currentTime;
@@ -2023,6 +2032,72 @@ function playBirdCall(birdId, x){
       playNote(t, f*pitchJitter, dur, call.type, call.vol*distMul, bend?bend*pitchJitter:undefined, call.vib, call.vibDepth, call.harsh);
       t += dur + (call.gap||0);
     });
+  }catch(e){}
+}
+/* オカメインコ 新合成: 山なりの速いスイープを2〜3音節、基音+倍音+フォルマント+浅いトレモロ+息の立ち上がりで、
+   笛のように鳴きつつ電子音っぽさを抑える試作。良ければ他種にも展開する。 */
+function okameSyllable(c, t0, f0, fHi, fEnd, dur, vol){
+  const N=32, curve=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    const p=i/(N-1);
+    curve[i] = Math.max(60, p<0.35 ? f0+(fHi-f0)*(p/0.35) : fHi+(fEnd-fHi)*((p-0.35)/0.65));
+  }
+  const master=c.createGain();
+  master.gain.setValueAtTime(0.0001,t0);
+  master.gain.exponentialRampToValueAtTime(vol, t0+0.012);
+  master.gain.setValueAtTime(vol, t0+dur*0.6);
+  master.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2700; bp.Q.value=1.6;
+  master.connect(bp); bp.connect(c.destination);
+  const trem=c.createOscillator(), tremG=c.createGain();
+  trem.frequency.value=42; tremG.gain.value=vol*0.18;
+  trem.connect(tremG); tremG.connect(master.gain);
+  trem.start(t0); trem.stop(t0+dur+0.02);
+  const vib=c.createOscillator(), vibG=c.createGain();
+  vib.frequency.value=14; vibG.gain.value=10; vib.connect(vibG);
+  [[1,0.6,'sine'],[2,0.34,'sine'],[3,0.14,'triangle']].forEach(([mult,g,type],idx)=>{
+    const o=c.createOscillator(); o.type=type;
+    const hc=new Float32Array(N); for(let i=0;i<N;i++) hc[i]=curve[i]*mult;
+    o.frequency.setValueCurveAtTime(hc, t0, dur);
+    if(idx===1) o.detune.value=6;
+    vibG.connect(o.frequency);
+    const og=c.createGain(); og.gain.value=g;
+    o.connect(og); og.connect(master);
+    o.start(t0); o.stop(t0+dur+0.02);
+  });
+  vib.start(t0); vib.stop(t0+dur+0.02);
+  const nlen=Math.max(1,Math.floor(c.sampleRate*0.018));
+  const nb=c.createBuffer(1,nlen,c.sampleRate), nd=nb.getChannelData(0);
+  for(let i=0;i<nlen;i++) nd[i]=(Math.random()*2-1)*(1-i/nlen);
+  const ns=c.createBufferSource(); ns.buffer=nb;
+  const nf=c.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=f0*1.5; nf.Q.value=0.8;
+  const ng=c.createGain(); ng.gain.value=vol*0.35;
+  ns.connect(nf); nf.connect(ng); ng.connect(c.destination); ns.start(t0);
+}
+function playOkameNew(x){
+  if(sv.muted) return;
+  try{
+    const c=ac(), t0=c.currentTime;
+    const distMul = 0.7 + 0.3*(1 - Math.min(1, Math.abs((x===undefined?W/2:x)-W/2)/(W/2)));
+    const nSyl = 2 + (Math.random()<0.55?1:0);
+    const baseJit = 0.96 + Math.random()*0.08;
+    let t=t0;
+    for(let i=0;i<nSyl;i++){
+      const sj = 0.97 + Math.random()*0.06;
+      const dur = 0.15 + Math.random()*0.04;
+      okameSyllable(c, t, 1450*baseJit*sj, 2550*baseJit*sj, 2050*baseJit*sj, dur, 0.075*distMul);
+      t += dur + 0.06 + Math.random()*0.03;
+    }
+  }catch(e){}
+}
+/* 旧オカメ(聞き比べ用): 従来の単一音を再現 */
+function playOkameOldRaw(x){
+  if(sv.muted) return;
+  try{
+    const c=ac(), t0=c.currentTime;
+    const distMul = 0.7 + 0.3*(1 - Math.min(1, Math.abs((x===undefined?W/2:x)-W/2)/(W/2)));
+    const pj=0.96+Math.random()*0.08;
+    playNote(t0, 900*pj, .42, 'triangle', .065*distMul, 1500*pj, 5, 40, false);
   }catch(e){}
 }
 const SFX={
@@ -4972,6 +5047,10 @@ document.querySelectorAll('[data-snd]').forEach(b=>{
 });
 document.getElementById('goSettings').onclick=()=>{ SFX.tap(); showScreen('scrSettings'); renderSettings(); };
 document.getElementById('settingsBack').onclick=()=>{ SFX.tap(); showScreen('scrTitle'); };
+(function(){
+  const ob=document.getElementById('okameOldBtn'); if(ob) ob.onclick=()=>{ playOkameOldRaw(W/2); };
+  const nb=document.getElementById('okameNewBtn'); if(nb) nb.onclick=()=>{ playOkameNew(W/2); };
+})();
 document.getElementById('resetSave').onclick=()=>{ document.getElementById('ovReset').classList.add('show'); };
 document.getElementById('resetNo').onclick=()=>{ document.getElementById('ovReset').classList.remove('show'); };
 document.getElementById('resetYes').onclick=()=>{
