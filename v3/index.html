@@ -1042,8 +1042,9 @@ let sv = load();
 function load(){
   try{
     const raw = localStorage.getItem(SAVE_KEY);
-    if(!raw) return JSON.parse(JSON.stringify(DEFAULT_SAVE));
-    const o = JSON.parse(raw);
+    // 新規プレイヤー(セーブデータ無し)でも、以降の鳥データ補完処理などを必ず通すため、
+    // ここで早期returnせず o=null のまま通常フローに合流させる。
+    const o = raw ? JSON.parse(raw) : null;
     // 保存データが壊れていてもゲームが起動不能にならないよう、既定値で補う
     const s = Object.assign(JSON.parse(JSON.stringify(DEFAULT_SAVE)), o||{});
     // 難易度モード導入前の旧形式(cleared/unlockedがステージ直下)をNORMALへ移行
@@ -2377,7 +2378,10 @@ function initBirds(){
     callCd:60+Math.floor(Math.random()*200),   // 次に鳴くまでのクールタイム(個体差)
   }));
   buildAbilityCtx();
-  activeBirds.forEach(b=>{ sv.birdData[b.def.id].sorties++; });
+  activeBirds.forEach(b=>{
+    if(!sv.birdData[b.def.id]) sv.birdData[b.def.id]={lv:1,xp:0,sorties:0,kills:0,uses:0,skin:null,fav:false,r5:false,r10:false};
+    sv.birdData[b.def.id].sorties++;
+  });
   save();
   // 戦闘開始: 低確率で1〜2羽が鳴く
   activeBirds.forEach(b=>{
