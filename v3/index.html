@@ -2274,6 +2274,7 @@ function buildWaves(st){
 }
 let curMods={hp:1,spd:1,count:1,special:0};
 function startStage(id){
+  if(running) return;   // 連打等による二重起動防止(loopの多重チェーン化を防ぐ)
   stageId=id;
   curMods = stageMods(sv.curDiff, id);
   // stageOf()は共有配列への直接参照を返すため、難易度補正をかける前に必ずコピーする
@@ -4462,7 +4463,7 @@ function endStage(win){
       }
       // NORMAL初回全クリアで武器覚醒システムが解放。HARD以上の初回全クリアでは覚醒コアを追加入手
       if(sv.curDiff==='normal'){
-        bonusRows.push(['⚗️ 武器覚醒システム解放!','']);
+        bonusRows.push(['⚗️ 武器覚醒システム解放!','覚醒コアはHARD以上で入手できます']);
       } else {
         sv.cores+=2;
         bonusRows.push(['💎 覚醒コア','+2 (計'+sv.cores+')']);
@@ -4783,6 +4784,13 @@ function renderAwakenShop(){
   });
   chipHead.appendChild(chipGrid);
   list.appendChild(chipHead);
+
+  // 覚醒コアの入手方法の説明(NORMALだけでは入手できないため、不足時に必ず案内する)
+  const coreHint=document.createElement('div');
+  coreHint.className='shop-row';
+  coreHint.innerHTML='<div class="shop-meta" style="line-height:1.5;">💎 覚醒コア 所持数: '+sv.cores+'個<br>'
+    +'覚醒コアはHARD以上のステージ中(ボス撃破時に確率でドロップ)と、HARD以上の難易度を初回全クリアした時に入手できます。NORMALをプレイしているだけでは入手できませんのでご注意ください。</div>';
+  list.appendChild(coreHint);
 
   MAINS.forEach(w=>{
     const own = sv.main[w.id] && sv.main[w.id].own && sv.main[w.id].lv>=5;
