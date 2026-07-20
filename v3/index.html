@@ -24,10 +24,20 @@
   h1{font-size:clamp(20px,5.5vw,32px);color:var(--green);text-shadow:2px 3px 0 #1c6b2c;text-align:center;}
   #titleCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:0;}
   .title-ui{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;
-    gap:12px;padding:16px;width:100%;}
+    gap:12px;padding:16px;width:100%;
+    max-height:100vh;max-height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
   #scrTitle h1{text-shadow:2px 3px 0 #1c6b2c, 0 0 18px rgba(6,10,18,.8);}
   #scrTitle .btn, #scrTitle .coin-badge{box-shadow:0 4px 0 rgba(0,0,0,.35), 0 2px 14px rgba(6,10,18,.5);
     max-width:250px; min-width:0; width:64vw;}
+  /* 横向き・低い画面高さ(スマホを横にした時など)はボタン列が縦に収まりきらないため、
+     余白と文字サイズを詰めてスクロール量そのものを減らす */
+  @media (max-height:480px){
+    #scrTitle .title-ui{gap:6px;padding:8px 16px;}
+    #scrTitle h1{font-size:clamp(14px,4vw,18px);line-height:1.15;margin-bottom:2px;}
+    #scrTitle .btn{padding:7px 22px;font-size:13px;min-width:0;}
+    #scrTitle .hint{font-size:10px;line-height:1.4;}
+    #scrTitle .coin-badge{padding:4px 10px;font-size:13px;}
+  }
   .hint{color:#8fa5c4;font-size:12px;text-align:center;line-height:1.7;}
   .btn{background:var(--ui);color:#3a2c00;border:none;border-radius:14px;
     padding:14px 30px;font-size:16px;font-weight:bold;cursor:pointer;min-width:200px;
